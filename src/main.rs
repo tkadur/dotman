@@ -5,7 +5,7 @@ use std::error;
 
 fn go() -> Result<(), Box<error::Error>> {
     let config = config::get()?;
-    println!("{:?}", config);
+    println!("{:#?}", config);
 
     Ok(())
 }
@@ -14,7 +14,7 @@ fn main() {
     match go() {
         Ok(()) => (),
         Err(err) => {
-            println!("Error: {}", err.to_string());
+            println!("{}", err);
             std::process::exit(1);
         }
     };

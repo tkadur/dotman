@@ -1,4 +1,4 @@
-pub mod rcrc;
+mod rcrc;
 
 use gethostname::gethostname;
 use std::{error, path::PathBuf};
@@ -17,9 +17,13 @@ pub struct Config {
     hostname: String,
 }
 
+/// Represents a "partial" or "incomplete" version of `Config`. Fields which
+/// can be merged losslessly with other `PartialConfig`s and have some notion
+/// of a "default" or "empty" state (e.g. `excludes`) are not optional.
+/// All other fields are optional.
 #[derive(Debug)]
 struct PartialConfig {
-    verbose: bool,
+    verbose: Option<bool>,
     excludes: Vec<String>,
     tags: Vec<String>,
     dotfiles_path: Option<(PathBuf, PartialSource)>,
@@ -37,7 +41,7 @@ fn get_cli() -> PartialConfig {
     let yaml = clap::load_yaml!("cli.yml");
     let matches = clap::App::from_yaml(yaml).get_matches();
 
-    let verbose = matches.is_present("verbose");
+    let verbose = Some(matches.is_present("verbose"));
 
     let values_to_vec = |name| {
         matches
@@ -68,7 +72,7 @@ fn get_cli() -> PartialConfig {
 /// Gets a partial configuration corresponding to the "default" values/sources
 /// of each configuration option.
 fn get_default() -> PartialConfig {
-    let verbose = false;
+    let verbose = None;
     let excludes = vec![];
     let tags = vec![];
 
@@ -94,10 +98,10 @@ fn merge_vecs<T>(x: Vec<T>, mut y: Vec<T>) -> Vec<T> {
 }
 
 /// Merges two partial configs together.
-/// For fields which cannot be merged and which are present in both
-/// arguments, the value from `config1` is used.
+/// For fields which cannot be merged and which are present in both arguments,
+/// the value from `config1` is used.
 fn merge_partial(config1: PartialConfig, config2: PartialConfig) -> PartialConfig {
-    let verbose = config1.verbose || config2.verbose;
+    let verbose = config1.verbose.or(config2.verbose);
     let excludes = merge_vecs(config1.excludes, config2.excludes);
     let tags = merge_vecs(config1.tags, config2.tags);
     let dotfiles_path = config1.dotfiles_path.or(config2.dotfiles_path);
@@ -116,9 +120,12 @@ fn merge_rcrc(
     partial_config: PartialConfig,
     rcrc_config: rcrc::Config,
 ) -> Result<Config, Box<error::Error>> {
-    let verbose = partial_config.verbose;
+    let verbose = partial_config.verbose.unwrap_or(false);
 
-    let excludes = merge_vecs(partial_config.excludes, rcrc_config.excludes.unwrap_or(vec![]));
+    let excludes = merge_vecs(
+        partial_config.excludes,
+        rcrc_config.excludes.unwrap_or(vec![]),
+    );
     let tags = merge_vecs(partial_config.tags, rcrc_config.tags.unwrap_or(vec![]));
 
     // Making sure to respect the hierarchy of selecting in the following order
@@ -154,7 +161,7 @@ fn merge_rcrc(
 
 // TODO Finish
 fn find_rcrc(partial_config: &PartialConfig) -> Option<PathBuf> {
-    dirs::home_dir().map(|home| home.join("rcrc"))
+    dirs::home_dir().map(|home| home.join(".rcrc-test"))
 }
 
 pub fn get() -> Result<Config, Box<error::Error>> {
