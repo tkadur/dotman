@@ -1,0 +1,31 @@
+name: rcm
+version: "0.0.1"
+author: "Thejas Kadur <thejas.kadur@gmail.com>"
+args:
+  - excludes:
+      long: excludes
+      help: Files to be excluded
+      takes_value: true
+      min_values: 1
+  - tags:
+      long: tags
+      help: Tags to enable
+      takes_value: true
+      min_values: 1
+  - dotfiles_path:
+      long: dotfiles-path
+      help: Location of dotfiles folder
+      takes_value: true
+  - hostname:
+      long: hostname
+      help: Hostname to use
+      takes_value: true
+  - verbose:
+      short: v
+      long: verbose
+      help: Enables verbose output
+subcommands:
+  - link:
+      about: Links dotfiles
+  - ls:
+      about: Shows dotfiles which will be linked

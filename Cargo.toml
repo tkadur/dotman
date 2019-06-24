@@ -5,8 +5,11 @@ authors = ["Thejaswi Kadur <thejas.kadur@gmail.com>"]
 edition = "2018"
 
 [dependencies]
-gethostname = "*"
-dirs = "*"
-serde = { version = "*", features = ["derive"] }
-toml = "*"
-derive_more = "*"
+# For safety, assume the semver policy of no stability before 1.0.0.
+# This is different than Cargo's defaults.
+gethostname = "0.2.0"
+dirs = "^2.0.1"
+serde = { version = "^1.0.92", features = ["derive"] }
+toml = "0.5.1"
+derive_more = "0.15.0"
+clap = {version = "^2.27.0", features = ["yaml"]}
