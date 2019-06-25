@@ -49,7 +49,7 @@ impl error::Error for Error {
 /// and will return an empty config. Failure to read the rcrc
 /// file or a malformed rcrc, on the other hand, _is_ considered
 /// an error.
-pub fn get(rcrc_path: Option<PathBuf>) -> Result<Config, Box<error::Error>> {
+pub fn get(rcrc_path: Option<PathBuf>) -> Result<Config, Box<dyn error::Error>> {
     let path = match rcrc_path {
         Some(path) => path,
         None => return Ok(Config::default()),

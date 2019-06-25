@@ -11,5 +11,6 @@ gethostname = "0.2.0"
 dirs = "^2.0.1"
 serde = { version = "^1.0.92", features = ["derive"] }
 toml = "0.5.1"
-derive_more = "0.15.0"
+# derive_more = "0.15.0"
+derive-getters = "0.0.8"
 clap = {version = "^2.27.0", features = ["yaml"]}

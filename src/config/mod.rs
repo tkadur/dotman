@@ -1,5 +1,6 @@
 mod rcrc;
 
+use derive_getters::Getters;
 use gethostname::gethostname;
 use std::{error, path::PathBuf};
 
@@ -8,7 +9,7 @@ use std::{error, path::PathBuf};
 // `rcrc::Config` is more "raw" than this because it's meant to be a direct translation
 // of the user's rcrc file. This type encompasses all possible configuration options,
 // eliminates the optional-ness of `rcrc::Config`'s fields
-#[derive(Debug)]
+#[derive(Debug, Getters)]
 pub struct Config {
     verbose: bool,
     excludes: Vec<String>,
@@ -48,8 +49,8 @@ fn get_cli() -> PartialConfig {
             .values_of(name)
             .map(|e| e.map(String::from).collect())
     };
-    let excludes = values_to_vec("excludes").unwrap_or(vec![]);
-    let tags = values_to_vec("tags").unwrap_or(vec![]);
+    let excludes = values_to_vec("excludes").unwrap_or_else(|| vec![]);
+    let tags = values_to_vec("tags").unwrap_or_else(|| vec![]);
 
     let dotfiles_path = matches
         .value_of("dotfiles_path")
@@ -119,14 +120,14 @@ fn merge_partial(config1: PartialConfig, config2: PartialConfig) -> PartialConfi
 fn merge_rcrc(
     partial_config: PartialConfig,
     rcrc_config: rcrc::Config,
-) -> Result<Config, Box<error::Error>> {
+) -> Result<Config, Box<dyn error::Error>> {
     let verbose = partial_config.verbose.unwrap_or(false);
 
     let excludes = merge_vecs(
         partial_config.excludes,
-        rcrc_config.excludes.unwrap_or(vec![]),
+        rcrc_config.excludes.unwrap_or_else(|| vec![]),
     );
-    let tags = merge_vecs(partial_config.tags, rcrc_config.tags.unwrap_or(vec![]));
+    let tags = merge_vecs(partial_config.tags, rcrc_config.tags.unwrap_or_else(|| vec![]));
 
     // Making sure to respect the hierarchy of selecting in the following order
     // - CLI
@@ -160,11 +161,11 @@ fn merge_rcrc(
 }
 
 // TODO Finish
-fn find_rcrc(partial_config: &PartialConfig) -> Option<PathBuf> {
+fn find_rcrc(_partial_config: &PartialConfig) -> Option<PathBuf> {
     dirs::home_dir().map(|home| home.join(".rcrc-test"))
 }
 
-pub fn get() -> Result<Config, Box<error::Error>> {
+pub fn get() -> Result<Config, Box<dyn error::Error>> {
     let partial_config = merge_partial(get_cli(), get_default());
     let rcrc_config = rcrc::get(find_rcrc(&partial_config))?;
 
