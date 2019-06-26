@@ -3,7 +3,7 @@ use std::{
     collections::HashSet,
     error,
     ffi::OsString,
-    fmt, fs, io, iter,
+    fmt, io, iter,
     path::{Path, PathBuf},
 };
 
@@ -44,7 +44,7 @@ fn find_items<F>(
 where
     F: Fn(&str) -> bool,
 {
-    for entry in fs::read_dir(path).map_err(IoError)? {
+    for entry in path.read_dir().map_err(IoError)? {
         let entry = entry.map_err(IoError)?;
 
         let name_raw = entry.file_name();

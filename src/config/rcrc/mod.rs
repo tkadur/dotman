@@ -5,16 +5,6 @@ use std::{
     path::PathBuf,
 };
 
-#[derive(Debug, Default, Deserialize)]
-#[serde(deny_unknown_fields)]
-/// Configuration options available in rcrc
-pub struct Config {
-    pub excludes: Option<Vec<String>>,
-    pub tags: Option<Vec<String>>,
-    pub dotfiles_path: Option<String>,
-    pub hostname: Option<String>,
-}
-
 #[derive(Debug)]
 enum Error {
     ParseError(toml::de::Error),
@@ -42,6 +32,15 @@ impl error::Error for Error {
     }
 }
 
+#[derive(Debug, Default, Deserialize)]
+#[serde(deny_unknown_fields)]
+/// Configuration options available in rcrc
+pub struct Config {
+    pub excludes: Option<Vec<String>>,
+    pub tags: Option<Vec<String>>,
+    pub dotfiles_path: Option<String>,
+    pub hostname: Option<String>,
+}
 
 /// Gets configuration options from the rcrc file.
 ///
