@@ -8,11 +8,11 @@ use std::{error, path::PathBuf};
 //
 // `rcrc::Config` is more "raw" than this because it's meant to be a direct translation
 // of the user's rcrc file. This type encompasses all possible configuration options,
-// eliminates the optional-ness of `rcrc::Config`'s fields
+// so it eliminates the optional-ness of `rcrc::Config`'s fields
 #[derive(Debug, Getters)]
 pub struct Config {
     verbose: bool,
-    excludes: Vec<String>,
+    excludes: Vec<PathBuf>,
     tags: Vec<String>,
     dotfiles_path: PathBuf,
     hostname: String,
@@ -25,7 +25,7 @@ pub struct Config {
 #[derive(Debug)]
 struct PartialConfig {
     verbose: Option<bool>,
-    excludes: Vec<String>,
+    excludes: Vec<PathBuf>,
     tags: Vec<String>,
     dotfiles_path: Option<(PathBuf, PartialSource)>,
     hostname: Option<(String, PartialSource)>,
@@ -38,27 +38,30 @@ enum PartialSource {
 }
 
 /// Gets a partial configuration from CLI arguments.
-fn get_cli() -> PartialConfig {
-    let yaml = clap::load_yaml!("cli.yml");
-    let matches = clap::App::from_yaml(yaml).get_matches();
+fn get_cli(args: &clap::ArgMatches) -> PartialConfig {
+    let verbose = Some(args.is_present("verbose"));
 
-    let verbose = Some(matches.is_present("verbose"));
+    fn values_to_vec<'a, T>(
+        args: &'a clap::ArgMatches,
+        name: &str,
+        f: impl Fn(&'a str) -> T,
+    ) -> Vec<T> {
+        args.values_of(name)
+            .map(|e| e.map(f).collect())
+            .unwrap_or_else(|| vec![])
+    }
+    let excludes = values_to_vec(args, "excludes", PathBuf::from);
+    let tags = values_to_vec(args, "tags", String::from);
 
-    let values_to_vec = |name| {
-        matches
-            .values_of(name)
-            .map(|e| e.map(String::from).collect())
-    };
-    let excludes = values_to_vec("excludes").unwrap_or_else(|| vec![]);
-    let tags = values_to_vec("tags").unwrap_or_else(|| vec![]);
-
-    let dotfiles_path = matches
-        .value_of("dotfiles_path")
-        .map(|p| (PathBuf::from(p), PartialSource::Cli));
-
-    let hostname = matches
-        .value_of("hostname")
-        .map(|h| (String::from(h), PartialSource::Cli));
+    fn value_default<'a, T>(
+        args: &'a clap::ArgMatches,
+        name: &str,
+        f: impl Fn(&'a str) -> T,
+    ) -> Option<(T, PartialSource)> {
+        args.value_of(name).map(|p| (f(p), PartialSource::Cli))
+    }
+    let dotfiles_path = value_default(args, "dotfiles_path", PathBuf::from);
+    let hostname = value_default(args, "hostname", String::from);
 
     PartialConfig {
         verbose,
@@ -72,23 +75,32 @@ fn get_cli() -> PartialConfig {
 // TODO Consider making this a Default impl for PartialConfig
 /// Gets a partial configuration corresponding to the "default" values/sources
 /// of each configuration option.
-fn get_default() -> PartialConfig {
+fn get_default() -> Result<PartialConfig, Box<dyn error::Error>> {
     let verbose = None;
     let excludes = vec![];
     let tags = vec![];
 
-    let dotfiles_path = dirs::home_dir().map(|h| (h.join(".dotfiles"), PartialSource::Default));
-    let hostname = gethostname()
-        .to_str()
-        .map(|s| (String::from(s), PartialSource::Default));
+    let dotfiles_path = Some((
+        dirs::home_dir()
+            .ok_or("can't find home directory")?
+            .join("dotfiles"),
+        PartialSource::Default,
+    ));
+    let hostname = Some((
+        gethostname()
+            .to_str()
+            .ok_or("can't retrieve system hostname")?
+            .to_owned(),
+        PartialSource::Default,
+    ));
 
-    PartialConfig {
+    Ok(PartialConfig {
         verbose,
         excludes,
         tags,
         dotfiles_path,
         hostname,
-    }
+    })
 }
 
 fn merge_vecs<T>(x: Vec<T>, mut y: Vec<T>) -> Vec<T> {
@@ -123,11 +135,42 @@ fn merge_rcrc(
 ) -> Result<Config, Box<dyn error::Error>> {
     let verbose = partial_config.verbose.unwrap_or(false);
 
-    let excludes = merge_vecs(
+    let excludes = 
+    // Merge the excludes from partial_config (CLI + default) with the excludes from the rcrc
+    merge_vecs(
         partial_config.excludes,
-        rcrc_config.excludes.unwrap_or_else(|| vec![]),
+        // We need to handle the possibility of the rcrc not specifying any excludes,
+        // as well as converting from the raw String input to a PathBuf
+        rcrc_config
+            .excludes
+            .unwrap_or_else(|| vec![])
+            .iter()
+            .map(PathBuf::from)
+            .collect(),
+    )
+    .into_iter()
+    // Try to glob expand each exclude
+    // If PathBuf -> String conversion fails or the pattern is invalid,
+    // fall back to simply not trying to glob-expand
+    .map(|path: PathBuf| -> Result<Vec<PathBuf>, glob::GlobError> {
+        let paths = match path.to_str().map(glob::glob) {
+            Some(Ok(paths)) => paths,
+            None | Some(Err(_)) => return Ok(vec![path]),
+        };
+
+        paths.collect()
+    })
+    // If any glob expansion failed due to an I/O error, give up
+    .collect::<Result<Vec<Vec<PathBuf>>, _>>()?
+    // Then flatten the glob-expanded results
+    .into_iter()
+    .flatten()
+    .collect();
+
+    let tags = merge_vecs(
+        partial_config.tags,
+        rcrc_config.tags.unwrap_or_else(|| vec![]),
     );
-    let tags = merge_vecs(partial_config.tags, rcrc_config.tags.unwrap_or_else(|| vec![]));
 
     // Making sure to respect the hierarchy of selecting in the following order
     // - CLI
@@ -141,8 +184,18 @@ fn merge_rcrc(
         }
     }
 
+    fn expand_tilde(path: String) -> Option<String> {
+        Some(if path.starts_with('~') {
+            path.replacen("~", dirs::home_dir()?.to_str()?, 1)
+        } else {
+            path
+        })
+    }
     let dotfiles_path = {
-        let rcrc_dotfiles_path = rcrc_config.dotfiles_path.map(PathBuf::from);
+        let rcrc_dotfiles_path = rcrc_config
+            .dotfiles_path
+            .and_then(expand_tilde)
+            .map(PathBuf::from);
 
         merge_hierarchy(partial_config.dotfiles_path, rcrc_dotfiles_path)
             .ok_or("Dotfiles directory not found")?
@@ -165,8 +218,8 @@ fn find_rcrc(_partial_config: &PartialConfig) -> Option<PathBuf> {
     dirs::home_dir().map(|home| home.join(".rcrc-test"))
 }
 
-pub fn get() -> Result<Config, Box<dyn error::Error>> {
-    let partial_config = merge_partial(get_cli(), get_default());
+pub fn get(cli_args: &clap::ArgMatches) -> Result<Config, Box<dyn error::Error>> {
+    let partial_config = merge_partial(get_cli(cli_args), get_default()?);
     let rcrc_config = rcrc::get(find_rcrc(&partial_config))?;
 
     merge_rcrc(partial_config, rcrc_config)

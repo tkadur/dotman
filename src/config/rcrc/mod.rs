@@ -6,7 +6,7 @@ use std::{
 };
 
 #[derive(Debug)]
-enum Error {
+pub enum Error {
     ParseError(toml::de::Error),
     IoError(io::Error),
 }
@@ -19,7 +19,7 @@ impl fmt::Display for Error {
             IoError(error) => ("reading .rcrc", error.to_string()),
         };
 
-        write!(f, "Error {}: {}", error_type, error_msg)
+        write!(f, "error {} ({})", error_type, error_msg)
     }
 }
 
@@ -38,6 +38,7 @@ impl error::Error for Error {
 pub struct Config {
     pub excludes: Option<Vec<String>>,
     pub tags: Option<Vec<String>>,
+    #[serde(rename = "dotfiles-path")]
     pub dotfiles_path: Option<String>,
     pub hostname: Option<String>,
 }
@@ -48,7 +49,7 @@ pub struct Config {
 /// and will return an empty config. Failure to read the rcrc
 /// file or a malformed rcrc, on the other hand, _is_ considered
 /// an error.
-pub fn get(rcrc_path: Option<PathBuf>) -> Result<Config, Box<dyn error::Error>> {
+pub fn get(rcrc_path: Option<PathBuf>) -> Result<Config, Error> {
     let path = match rcrc_path {
         Some(path) => path,
         None => return Ok(Config::default()),
