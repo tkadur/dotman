@@ -3,9 +3,7 @@ mod rcrc;
 use derive_getters::Getters;
 use gethostname::gethostname;
 use globset::Glob;
-use std::{error, 
-    collections::HashSet,
-path::PathBuf};
+use std::{collections::HashSet, error, path::PathBuf};
 use walkdir::WalkDir;
 
 /// All rcm configuration options
