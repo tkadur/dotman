@@ -1,10 +1,43 @@
 mod rcrc;
 
 use derive_getters::Getters;
+use derive_more::From;
 use gethostname::gethostname;
 use globset::Glob;
-use std::{collections::HashSet, error, path::PathBuf};
+use std::{collections::HashSet, error, fmt::{self, Display}, path::PathBuf};
 use walkdir::WalkDir;
+
+#[derive(Debug, From)]
+pub enum Error {
+    NoSystemHostname,
+    NoHomeDirectory,
+    WalkdirError(walkdir::Error),
+    RcrcError(rcrc::Error),
+}
+use self::Error::*;
+
+impl Display for Error {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        let error_msg = match self {
+            NoSystemHostname => String::from("reading system hostname"),
+            NoHomeDirectory => String::from("finding home directory"),
+            WalkdirError(error) => format!("reading file or directory ({})", error.to_string()),
+            RcrcError(error) => error.to_string(),
+        };
+
+        write!(f, "error {}", error_msg)
+    }
+}
+
+impl error::Error for Error {
+    fn source(&self) -> Option<&(dyn error::Error + 'static)> {
+        match self {
+            WalkdirError(error) => Some(error),
+            RcrcError(error) => Some(error),
+            NoSystemHostname | NoHomeDirectory => None,
+        }
+    }
+}
 
 /// All rcm configuration options
 // `rcrc::Config` is more "raw" than this because it's meant to be a direct translation
@@ -104,18 +137,18 @@ struct DefaultConfig {
 impl DefaultConfig {
     /// Gets a partial configuration corresponding to the "default"
     /// values/sources of each configuration option.
-    fn get() -> Result<DefaultConfig, String> {
+    fn get() -> Result<DefaultConfig, Error> {
         let verbose = false;
         let excludes = vec![];
         let tags = vec![];
 
         let dotfiles_path = dirs::home_dir()
-            .ok_or("can't find home directory")?
+            .ok_or(NoHomeDirectory)?
             .join("dotfiles");
 
         let hostname = gethostname()
             .to_str()
-            .ok_or("can't retrieve system hostname")?
+            .ok_or(NoSystemHostname)?
             .to_owned();
 
         Ok(DefaultConfig {
@@ -140,7 +173,7 @@ fn merge_vecs<T>(x: Vec<T>, mut y: Vec<T>) -> Vec<T> {
 fn merge_rcrc(
     partial_config: PartialConfig,
     rcrc_config: rcrc::Config,
-) -> Result<Config, walkdir::Error> {
+) -> Result<Config, Error> {
     let verbose = partial_config.verbose;
 
     // Makes sure to respect the hierarchy of selecting in the following order
@@ -252,7 +285,7 @@ fn find_rcrc(_partial_config: &PartialConfig) -> Option<PathBuf> {
     dirs::home_dir().map(|home| home.join(".rcrc-test"))
 }
 
-pub fn get(cli_args: &clap::ArgMatches) -> Result<Config, Box<dyn error::Error>> {
+pub fn get(cli_args: &clap::ArgMatches) -> Result<Config, Error> {
     let partial_config = PartialConfig::merge(CliConfig::get(cli_args), DefaultConfig::get()?);
     let rcrc_config = rcrc::get(find_rcrc(&partial_config))?;
     let config = merge_rcrc(partial_config, rcrc_config)?;
