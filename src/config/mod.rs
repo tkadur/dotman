@@ -4,7 +4,12 @@ use derive_getters::Getters;
 use derive_more::From;
 use gethostname::gethostname;
 use globset::Glob;
-use std::{collections::HashSet, error, fmt::{self, Display}, path::PathBuf};
+use std::{
+    collections::HashSet,
+    error,
+    fmt::{self, Display},
+    path::PathBuf,
+};
 use walkdir::WalkDir;
 
 #[derive(Debug, From)]
@@ -142,14 +147,9 @@ impl DefaultConfig {
         let excludes = vec![];
         let tags = vec![];
 
-        let dotfiles_path = dirs::home_dir()
-            .ok_or(NoHomeDirectory)?
-            .join("dotfiles");
+        let dotfiles_path = dirs::home_dir().ok_or(NoHomeDirectory)?.join("dotfiles");
 
-        let hostname = gethostname()
-            .to_str()
-            .ok_or(NoSystemHostname)?
-            .to_owned();
+        let hostname = gethostname().to_str().ok_or(NoSystemHostname)?.to_owned();
 
         Ok(DefaultConfig {
             config: Config {
@@ -170,10 +170,7 @@ fn merge_vecs<T>(x: Vec<T>, mut y: Vec<T>) -> Vec<T> {
     res
 }
 
-fn merge_rcrc(
-    partial_config: PartialConfig,
-    rcrc_config: rcrc::Config,
-) -> Result<Config, Error> {
+fn merge_rcrc(partial_config: PartialConfig, rcrc_config: rcrc::Config) -> Result<Config, Error> {
     let verbose = partial_config.verbose;
 
     // Makes sure to respect the hierarchy of selecting in the following order

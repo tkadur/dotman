@@ -1,7 +1,9 @@
 use derive_more::From;
 use serde::Deserialize;
 use std::{
-    error, fmt, fs,
+    error,
+    fmt::{self, Display},
+    fs,
     io::{self, Read},
     path::PathBuf,
 };
@@ -13,7 +15,7 @@ pub enum Error {
 }
 use self::Error::*;
 
-impl fmt::Display for Error {
+impl Display for Error {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         let (error_type, error_msg) = match self {
             ParseError(error) => ("parsing .rcrc", error.to_string()),

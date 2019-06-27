@@ -2,7 +2,9 @@ use super::config::Config;
 use derive_more::From;
 use std::{
     collections::HashSet,
-    error, fmt, io, iter,
+    error,
+    fmt::{self, Display},
+    io, iter,
     path::{Path, PathBuf},
 };
 use walkdir::WalkDir;
@@ -14,7 +16,7 @@ pub enum Error {
 }
 use self::Error::*;
 
-impl fmt::Display for Error {
+impl Display for Error {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         let (error_type, error_msg) = match self {
             IoError(error) => ("reading from dotfiles directory", error.to_string()),
