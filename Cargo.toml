@@ -15,4 +15,4 @@ toml = "0.5.1"
 derive-getters = "0.0.8"
 clap = {version = "^2.27.0", features = ["yaml"]}
 walkdir = "^2.2.8"
-glob = "0.3.0"
+globset = "0.4.4"

@@ -67,7 +67,7 @@ pub fn get(rcrc_path: Option<PathBuf>) -> Result<Config, Error> {
         contents
     };
 
-    let config = toml::from_str::<Config>(&contents).map_err(ParseError)?;
+    let config = toml::from_str(&contents).map_err(ParseError)?;
 
     Ok(config)
 }

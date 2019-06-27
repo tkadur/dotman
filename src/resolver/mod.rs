@@ -1,16 +1,13 @@
 use super::config::Config;
 use std::{
     collections::HashSet,
-    error,
-    ffi::OsString,
-    fmt, io, iter,
+    error, fmt, io, iter,
     path::{Path, PathBuf},
 };
 use walkdir::WalkDir;
 
 #[derive(Debug)]
 enum Error {
-    FilenameError(OsString),
     IoError(io::Error),
     WalkdirError(walkdir::Error),
 }
@@ -19,7 +16,6 @@ use self::Error::*;
 impl fmt::Display for Error {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         let (error_type, error_msg) = match self {
-            FilenameError(name) => ("parsing filename", format!("{:?}", name)),
             IoError(error) => ("reading from dotfiles directory", error.to_string()),
             WalkdirError(error) => ("reading from dotfiles directory", error.to_string()),
         };
@@ -31,14 +27,14 @@ impl fmt::Display for Error {
 impl error::Error for Error {
     fn source(&self) -> Option<&(dyn error::Error + 'static)> {
         match self {
-            FilenameError(_) => None,
             IoError(error) => Some(error),
             WalkdirError(error) => Some(error),
         }
     }
 }
 
-/// Adds every non-hidden non-excluded file in `dir` (recursively, ignoring directories) to `res`.
+/// Adds every non-hidden non-excluded file in `dir` (recursively, ignoring
+/// directories) to `res`.
 fn link_dir_contents(
     dir: &Path,
     excludes: &HashSet<&Path>,
@@ -53,7 +49,7 @@ fn link_dir_contents(
     }
 
     for entry in WalkDir::new(dir).into_iter().filter_entry(is_not_hidden) {
-        let entry = dbg!(entry.map_err(WalkdirError))?;
+        let entry = entry.map_err(WalkdirError)?;
         let entry_full_path = entry.path();
         let path = match dir.parent() {
             None => entry_full_path,
@@ -70,17 +66,24 @@ fn link_dir_contents(
     Ok(())
 }
 
+/// Finds the items under `path` which are to be symlinked, according to all the
+/// options specified, and place then in `res`
+///
+/// Requires: `path` is absolute
+///
+/// Ensures: All paths in `res` are absolute
 fn find_items<F>(
-    config: &Config,
     path: PathBuf,
     is_prefixed: &F,
-    active_prefixed_dirs: &HashSet<String>,
+    active_prefixed_dirs: &HashSet<&Path>,
     excludes: &HashSet<&Path>,
     res: &mut Vec<PathBuf>,
 ) -> Result<(), Box<dyn error::Error>>
 where
-    F: Fn(&str) -> bool,
+    F: Fn(&Path) -> bool,
 {
+    debug_assert!(path.is_absolute());
+
     for entry in path.read_dir().map_err(IoError)? {
         let entry = entry.map_err(IoError)?;
         let entry_path_raw = entry.path();
@@ -88,19 +91,33 @@ where
             .strip_prefix(&path)
             .expect("entry must be within root");
 
-        let name_raw = entry.file_name();
-        let name = name_raw
-            .to_str()
-            .ok_or_else(|| FilenameError(name_raw.clone()))?;
+        let entry_name = PathBuf::from(entry.file_name());
 
-        if name.starts_with('.') || excludes.contains(entry_path) {
+        // println!(
+        //     "{:?}, prefixed: {}, hidden: {}, excluded: {}, active: {}",
+        //     entry_name,
+        //     is_prefixed(&entry_name),
+        //     is_hidden(&entry_name),
+        //     excludes.contains(entry_path),
+        //     active_prefixed_dirs.contains(entry_name.as_path())
+        // );
+
+        /// Checks if a filename is prefixed by a '.' character.
+        /// If the path cannot be read as a String, assume it isn't hidden.
+        fn is_hidden(filename: &Path) -> bool {
+            filename
+                .to_str()
+                .map(|s| s.starts_with('.'))
+                .unwrap_or(false)
+        }
+
+        if is_hidden(&entry_name) || excludes.contains(entry_path) {
             continue;
         }
 
-        if is_prefixed(name) {
-            if active_prefixed_dirs.contains(name) {
+        if is_prefixed(&entry_name) {
+            if active_prefixed_dirs.contains(entry_name.as_path()) {
                 find_items(
-                    config,
                     entry.path(),
                     is_prefixed,
                     active_prefixed_dirs,
@@ -113,6 +130,9 @@ where
         }
     }
 
+    for path in res {
+        debug_assert!(path.is_absolute());
+    }
     Ok(())
 }
 
@@ -120,28 +140,38 @@ pub fn get(config: Config) -> Result<Vec<PathBuf>, Box<dyn error::Error>> {
     let hostname_prefix = "host-";
     let tag_prefix = "tag-";
     let prefixes = [hostname_prefix, tag_prefix];
-    let is_prefixed = |filename: &str| {
+
+    // Checks if a path is prefixed by any element of prefixes
+    // If the path cannot be read as a String, assume it isn't.
+    let is_prefixed = |filename: &Path| -> bool {
         for prefix in &prefixes {
-            if filename.starts_with(prefix) {
-                return true;
+            match filename.to_str() {
+                Some(s) if s.starts_with(prefix) => return true,
+                _ => (),
             }
         }
 
         false
     };
 
-    let hostname_dir = [hostname_prefix, config.hostname()].concat();
-    let tag_dirs = config.tags().iter().map(|tag| [tag_prefix, tag].concat());
-    let active_prefixed_dirs = iter::once(hostname_dir)
-        .chain(tag_dirs)
-        .collect::<HashSet<_>>();
+    let hostname_dir = PathBuf::from([hostname_prefix, config.hostname()].concat());
+    let tag_dirs: Vec<PathBuf> = config
+        .tags()
+        .iter()
+        .map(|tag| PathBuf::from([tag_prefix, tag].concat()))
+        .collect();
+    let active_prefixed_dirs: HashSet<&Path> = iter::once(&hostname_dir)
+        .chain(tag_dirs.iter())
+        .map(|p| p.as_path())
+        .collect();
 
     let excludes = config.excludes().iter().map(|e| e.as_path()).collect();
+
+    println!("Excludes: {:?}", excludes);
 
     let mut res = vec![];
 
     find_items(
-        &config,
         config.dotfiles_path().clone(),
         &is_prefixed,
         &active_prefixed_dirs,

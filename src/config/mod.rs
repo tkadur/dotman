@@ -2,10 +2,13 @@ mod rcrc;
 
 use derive_getters::Getters;
 use gethostname::gethostname;
-use std::{error, path::PathBuf};
+use globset::Glob;
+use std::{error, 
+    collections::HashSet,
+path::PathBuf};
+use walkdir::WalkDir;
 
 /// All rcm configuration options
-//
 // `rcrc::Config` is more "raw" than this because it's meant to be a direct translation
 // of the user's rcrc file. This type encompasses all possible configuration options,
 // so it eliminates the optional-ness of `rcrc::Config`'s fields
@@ -135,37 +138,83 @@ fn merge_rcrc(
 ) -> Result<Config, Box<dyn error::Error>> {
     let verbose = partial_config.verbose.unwrap_or(false);
 
-    let excludes = 
-    // Merge the excludes from partial_config (CLI + default) with the excludes from the rcrc
-    merge_vecs(
-        partial_config.excludes,
-        // We need to handle the possibility of the rcrc not specifying any excludes,
-        // as well as converting from the raw String input to a PathBuf
-        rcrc_config
-            .excludes
-            .unwrap_or_else(|| vec![])
-            .iter()
-            .map(PathBuf::from)
-            .collect(),
-    )
-    .into_iter()
-    // Try to glob expand each exclude
-    // If PathBuf -> String conversion fails or the pattern is invalid,
-    // fall back to simply not trying to glob-expand
-    .map(|path: PathBuf| -> Result<Vec<PathBuf>, glob::GlobError> {
-        let paths = match path.to_str().map(glob::glob) {
-            Some(Ok(paths)) => paths,
-            None | Some(Err(_)) => return Ok(vec![path]),
-        };
+    fn expand_tilde(path: String) -> Option<String> {
+        Some(
+            if path.starts_with('~') {
+                path.replacen("~", dirs::home_dir()?.to_str()?, 1)
+            } else {
+                path
+            },
+        )
+    }
+    let dotfiles_path = {
+        let rcrc_dotfiles_path = rcrc_config
+            .dotfiles_path
+            .and_then(expand_tilde)
+            .map(PathBuf::from);
 
-        paths.collect()
-    })
-    // If any glob expansion failed due to an I/O error, give up
-    .collect::<Result<Vec<Vec<PathBuf>>, _>>()?
-    // Then flatten the glob-expanded results
-    .into_iter()
-    .flatten()
-    .collect();
+        merge_hierarchy(partial_config.dotfiles_path, rcrc_dotfiles_path)
+            .ok_or("Dotfiles directory not found")?
+    };
+    debug_assert!(dotfiles_path.is_absolute());
+
+    let excludes = {
+        let mut excludes: Vec<PathBuf> =
+            // Merge the excludes from partial_config (CLI + default) with the excludes from the rcrc
+            merge_vecs(
+                partial_config.excludes,
+                // We need to handle the possibility of the rcrc not specifying any excludes,
+                // as well as converting from the raw String input to a PathBuf
+                rcrc_config
+                    .excludes
+                    .unwrap_or_else(|| vec![])
+                    .iter()
+                    .map(PathBuf::from)
+                    .collect(),
+            )
+            .into_iter()
+            // Try to glob expand each exclude
+            // If PathBuf -> String conversion fails or the pattern is invalid,
+            // fall back to simply not trying to glob-expand
+            .map(|path: PathBuf| -> Result<Vec<PathBuf>, walkdir::Error> {
+                let glob = match path.to_str().map(Glob::new) {
+                    Some(Ok(glob)) => glob.compile_matcher(),
+                    None | Some(Err(_)) => return Ok(vec![path]),
+                };
+
+                let entries: Vec<walkdir::DirEntry> = WalkDir::new(&dotfiles_path)
+                    .follow_links(true)
+                    .into_iter()
+                    .collect::<Result<_, _>>()?;
+
+                let paths = entries
+                    .into_iter()
+                    .filter_map(|entry| {
+                        let entry_path = entry.path().strip_prefix(&dotfiles_path).expect("Entry must be in the dotfiles path");
+
+                        if glob.is_match(entry_path) {
+                            Some(PathBuf::from(entry_path))
+                        } else {
+                            None
+                        }
+                    })
+                    .collect();
+
+                Ok(paths)
+            })
+            // If any glob expansion failed due to an I/O error, give up
+            .collect::<Result<Vec<Vec<PathBuf>>, _>>()?
+            // Then flatten the glob-expanded results
+            .into_iter()
+            .flatten()
+            .collect();
+
+        // Finally, remove any duplicate entries from files matching multiple globs
+        let set: HashSet<_> = excludes.drain(..).collect();
+        excludes.extend(set.into_iter());
+
+        excludes
+    };
 
     let tags = merge_vecs(
         partial_config.tags,
@@ -183,23 +232,6 @@ fn merge_rcrc(
             None => rcrc,
         }
     }
-
-    fn expand_tilde(path: String) -> Option<String> {
-        Some(if path.starts_with('~') {
-            path.replacen("~", dirs::home_dir()?.to_str()?, 1)
-        } else {
-            path
-        })
-    }
-    let dotfiles_path = {
-        let rcrc_dotfiles_path = rcrc_config
-            .dotfiles_path
-            .and_then(expand_tilde)
-            .map(PathBuf::from);
-
-        merge_hierarchy(partial_config.dotfiles_path, rcrc_dotfiles_path)
-            .ok_or("Dotfiles directory not found")?
-    };
 
     let hostname = merge_hierarchy(partial_config.hostname, rcrc_config.hostname)
         .ok_or("Couldn't get hostname")?;
