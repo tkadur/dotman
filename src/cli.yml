@@ -7,15 +7,19 @@ settings:
 
 args:
     - excludes:
-        long: excludes
-        help: Files to be excluded. Supports Unix-style glob patterns.
+        short: e
+        long: exclude
+        help: File to be excluded. Supports Unix-style glob patterns.
         takes_value: true
-        min_values: 1
+        multiple: true
+        number_of_values: 1
     - tags:
-        long: tags
-        help: Tags to enable
+        short: t
+        long: tag
+        help: Tag to enable
         takes_value: true
-        min_values: 1
+        multiple: true
+        number_of_values: 1
     - dotfiles_path:
         long: dotfiles-path
         help: Location of dotfiles folder

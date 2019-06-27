@@ -1,3 +1,4 @@
+use derive_more::From;
 use serde::Deserialize;
 use std::{
     error, fmt, fs,
@@ -5,7 +6,7 @@ use std::{
     path::PathBuf,
 };
 
-#[derive(Debug)]
+#[derive(Debug, From)]
 pub enum Error {
     ParseError(toml::de::Error),
     IoError(io::Error),
@@ -62,12 +63,12 @@ pub fn get(rcrc_path: Option<PathBuf>) -> Result<Config, Error> {
         };
 
         let mut contents = String::new();
-        file.read_to_string(&mut contents).map_err(IoError)?;
+        file.read_to_string(&mut contents)?;
 
         contents
     };
 
-    let config = toml::from_str(&contents).map_err(ParseError)?;
+    let config = toml::from_str(&contents)?;
 
     Ok(config)
 }

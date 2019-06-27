@@ -1,4 +1,5 @@
 use super::config::Config;
+use derive_more::From;
 use std::{
     collections::HashSet,
     error, fmt, io, iter,
@@ -6,8 +7,8 @@ use std::{
 };
 use walkdir::WalkDir;
 
-#[derive(Debug)]
-enum Error {
+#[derive(Debug, From)]
+pub enum Error {
     IoError(io::Error),
     WalkdirError(walkdir::Error),
 }
@@ -39,7 +40,7 @@ fn link_dir_contents(
     dir: &Path,
     excludes: &HashSet<&Path>,
     res: &mut Vec<PathBuf>,
-) -> Result<(), Box<dyn error::Error>> {
+) -> Result<(), Error> {
     fn is_not_hidden(entry: &walkdir::DirEntry) -> bool {
         entry
             .file_name()
@@ -49,7 +50,7 @@ fn link_dir_contents(
     }
 
     for entry in WalkDir::new(dir).into_iter().filter_entry(is_not_hidden) {
-        let entry = entry.map_err(WalkdirError)?;
+        let entry = entry?;
         let entry_full_path = entry.path();
         let path = match dir.parent() {
             None => entry_full_path,
@@ -72,35 +73,23 @@ fn link_dir_contents(
 /// Requires: `path` is absolute
 ///
 /// Ensures: All paths in `res` are absolute
-fn find_items<F>(
+fn find_items(
     path: PathBuf,
-    is_prefixed: &F,
+    is_prefixed: &impl Fn(&Path) -> bool,
     active_prefixed_dirs: &HashSet<&Path>,
     excludes: &HashSet<&Path>,
     res: &mut Vec<PathBuf>,
-) -> Result<(), Box<dyn error::Error>>
-where
-    F: Fn(&Path) -> bool,
-{
+) -> Result<(), Error> {
     debug_assert!(path.is_absolute());
 
-    for entry in path.read_dir().map_err(IoError)? {
-        let entry = entry.map_err(IoError)?;
+    for entry in path.read_dir()? {
+        let entry = entry?;
         let entry_path_raw = entry.path();
         let entry_path = entry_path_raw
             .strip_prefix(&path)
             .expect("entry must be within root");
 
         let entry_name = PathBuf::from(entry.file_name());
-
-        // println!(
-        //     "{:?}, prefixed: {}, hidden: {}, excluded: {}, active: {}",
-        //     entry_name,
-        //     is_prefixed(&entry_name),
-        //     is_hidden(&entry_name),
-        //     excludes.contains(entry_path),
-        //     active_prefixed_dirs.contains(entry_name.as_path())
-        // );
 
         /// Checks if a filename is prefixed by a '.' character.
         /// If the path cannot be read as a String, assume it isn't hidden.
@@ -136,7 +125,7 @@ where
     Ok(())
 }
 
-pub fn get(config: Config) -> Result<Vec<PathBuf>, Box<dyn error::Error>> {
+pub fn get(config: Config) -> Result<Vec<PathBuf>, Error> {
     let hostname_prefix = "host-";
     let tag_prefix = "tag-";
     let prefixes = [hostname_prefix, tag_prefix];

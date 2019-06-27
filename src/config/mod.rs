@@ -19,89 +19,115 @@ pub struct Config {
     hostname: String,
 }
 
-/// Represents a "partial" or "incomplete" version of `Config`. Fields which
-/// can be merged losslessly with other `PartialConfig`s and have some notion
-/// of a "default" or "empty" state (e.g. `excludes`) are not optional.
-/// All other fields are optional.
-#[derive(Debug)]
-struct PartialConfig {
-    verbose: Option<bool>,
-    excludes: Vec<PathBuf>,
-    tags: Vec<String>,
-    dotfiles_path: Option<(PathBuf, PartialSource)>,
-    hostname: Option<(String, PartialSource)>,
-}
-
 #[derive(Debug)]
 enum PartialSource {
     Cli,
     Default,
 }
 
-/// Gets a partial configuration from CLI arguments.
-fn get_cli(args: &clap::ArgMatches) -> PartialConfig {
-    let verbose = Some(args.is_present("verbose"));
+#[derive(Debug)]
+struct PartialConfig {
+    verbose: bool,
+    excludes: Vec<PathBuf>,
+    tags: Vec<String>,
+    dotfiles_path: (PathBuf, PartialSource),
+    hostname: (String, PartialSource),
+}
 
-    fn values_to_vec<'a, T>(
-        args: &'a clap::ArgMatches,
-        name: &str,
-        f: impl Fn(&'a str) -> T,
-    ) -> Vec<T> {
-        args.values_of(name)
-            .map(|e| e.map(f).collect())
-            .unwrap_or_else(|| vec![])
-    }
-    let excludes = values_to_vec(args, "excludes", PathBuf::from);
-    let tags = values_to_vec(args, "tags", String::from);
+impl PartialConfig {
+    fn merge(cli: CliConfig, default: DefaultConfig) -> Self {
+        let verbose = cli.verbose.unwrap_or(default.config.verbose);
+        let excludes = merge_vecs(
+            cli.excludes.unwrap_or_else(|| vec![]),
+            default.config.excludes,
+        );
+        let tags = merge_vecs(cli.tags.unwrap_or_else(|| vec![]), default.config.tags);
 
-    fn value_default<'a, T>(
-        args: &'a clap::ArgMatches,
-        name: &str,
-        f: impl Fn(&'a str) -> T,
-    ) -> Option<(T, PartialSource)> {
-        args.value_of(name).map(|p| (f(p), PartialSource::Cli))
-    }
-    let dotfiles_path = value_default(args, "dotfiles_path", PathBuf::from);
-    let hostname = value_default(args, "hostname", String::from);
+        fn merge_with_source<T>(cli: Option<T>, default: T) -> (T, PartialSource) {
+            cli.map(|c| (c, PartialSource::Cli))
+                .unwrap_or((default, PartialSource::Default))
+        }
+        let dotfiles_path = merge_with_source(cli.dotfiles_path, default.config.dotfiles_path);
+        let hostname = merge_with_source(cli.hostname, default.config.hostname);
 
-    PartialConfig {
-        verbose,
-        excludes,
-        tags,
-        dotfiles_path,
-        hostname,
+        PartialConfig {
+            verbose,
+            excludes,
+            tags,
+            dotfiles_path,
+            hostname,
+        }
     }
 }
 
-// TODO Consider making this a Default impl for PartialConfig
-/// Gets a partial configuration corresponding to the "default" values/sources
-/// of each configuration option.
-fn get_default() -> Result<PartialConfig, Box<dyn error::Error>> {
-    let verbose = None;
-    let excludes = vec![];
-    let tags = vec![];
+#[derive(Debug)]
+struct CliConfig {
+    verbose: Option<bool>,
+    excludes: Option<Vec<PathBuf>>,
+    tags: Option<Vec<String>>,
+    dotfiles_path: Option<PathBuf>,
+    hostname: Option<String>,
+}
 
-    let dotfiles_path = Some((
-        dirs::home_dir()
+impl CliConfig {
+    /// Gets a partial configuration from CLI arguments.
+    fn get(args: &clap::ArgMatches) -> Self {
+        let verbose = Some(args.is_present("verbose"));
+
+        fn values_to_vec<'a, T>(
+            args: &'a clap::ArgMatches,
+            name: &str,
+            f: impl Fn(&'a str) -> T,
+        ) -> Option<Vec<T>> {
+            args.values_of(name).map(|e| e.map(f).collect())
+        }
+        let excludes = values_to_vec(args, "excludes", PathBuf::from);
+        let tags = values_to_vec(args, "tags", String::from);
+
+        let dotfiles_path = args.value_of("dotfiles_path").map(PathBuf::from);
+        let hostname = args.value_of("hostname").map(String::from);
+
+        CliConfig {
+            verbose,
+            excludes,
+            tags,
+            dotfiles_path,
+            hostname,
+        }
+    }
+}
+
+struct DefaultConfig {
+    config: Config,
+}
+
+impl DefaultConfig {
+    /// Gets a partial configuration corresponding to the "default"
+    /// values/sources of each configuration option.
+    fn get() -> Result<DefaultConfig, String> {
+        let verbose = false;
+        let excludes = vec![];
+        let tags = vec![];
+
+        let dotfiles_path = dirs::home_dir()
             .ok_or("can't find home directory")?
-            .join("dotfiles"),
-        PartialSource::Default,
-    ));
-    let hostname = Some((
-        gethostname()
+            .join("dotfiles");
+
+        let hostname = gethostname()
             .to_str()
             .ok_or("can't retrieve system hostname")?
-            .to_owned(),
-        PartialSource::Default,
-    ));
+            .to_owned();
 
-    Ok(PartialConfig {
-        verbose,
-        excludes,
-        tags,
-        dotfiles_path,
-        hostname,
-    })
+        Ok(DefaultConfig {
+            config: Config {
+                verbose,
+                excludes,
+                tags,
+                dotfiles_path,
+                hostname,
+            },
+        })
+    }
 }
 
 fn merge_vecs<T>(x: Vec<T>, mut y: Vec<T>) -> Vec<T> {
@@ -111,48 +137,39 @@ fn merge_vecs<T>(x: Vec<T>, mut y: Vec<T>) -> Vec<T> {
     res
 }
 
-/// Merges two partial configs together.
-/// For fields which cannot be merged and which are present in both arguments,
-/// the value from `config1` is used.
-fn merge_partial(config1: PartialConfig, config2: PartialConfig) -> PartialConfig {
-    let verbose = config1.verbose.or(config2.verbose);
-    let excludes = merge_vecs(config1.excludes, config2.excludes);
-    let tags = merge_vecs(config1.tags, config2.tags);
-    let dotfiles_path = config1.dotfiles_path.or(config2.dotfiles_path);
-    let hostname = config1.hostname.or(config2.hostname);
-
-    PartialConfig {
-        verbose,
-        excludes,
-        tags,
-        dotfiles_path,
-        hostname,
-    }
-}
-
 fn merge_rcrc(
     partial_config: PartialConfig,
     rcrc_config: rcrc::Config,
-) -> Result<Config, Box<dyn error::Error>> {
-    let verbose = partial_config.verbose.unwrap_or(false);
+) -> Result<Config, walkdir::Error> {
+    let verbose = partial_config.verbose;
 
-    fn expand_tilde(path: String) -> Option<String> {
-        Some(
-            if path.starts_with('~') {
-                path.replacen("~", dirs::home_dir()?.to_str()?, 1)
-            } else {
-                path
-            },
-        )
+    // Makes sure to respect the hierarchy of selecting in the following order
+    // - CLI
+    // - rcrc
+    // - Default source
+    fn merge_hierarchy<T>(partial: (T, PartialSource), rcrc: Option<T>) -> T {
+        match partial {
+            (x, PartialSource::Cli) => x,
+            (x, PartialSource::Default) => rcrc.unwrap_or(x),
+        }
     }
     let dotfiles_path = {
+        fn expand_tilde(path: String) -> Option<String> {
+            Some(
+                if path.starts_with('~') {
+                    path.replacen("~", dirs::home_dir()?.to_str()?, 1)
+                } else {
+                    path
+                },
+            )
+        }
+
         let rcrc_dotfiles_path = rcrc_config
             .dotfiles_path
             .and_then(expand_tilde)
             .map(PathBuf::from);
 
         merge_hierarchy(partial_config.dotfiles_path, rcrc_dotfiles_path)
-            .ok_or("Dotfiles directory not found")?
     };
     debug_assert!(dotfiles_path.is_absolute());
 
@@ -219,20 +236,7 @@ fn merge_rcrc(
         rcrc_config.tags.unwrap_or_else(|| vec![]),
     );
 
-    // Making sure to respect the hierarchy of selecting in the following order
-    // - CLI
-    // - rcrc
-    // - Default source
-    fn merge_hierarchy<T>(partial: Option<(T, PartialSource)>, rcrc: Option<T>) -> Option<T> {
-        match partial {
-            Some((x, PartialSource::Cli)) => Some(x),
-            Some((x, PartialSource::Default)) => Some(rcrc.unwrap_or(x)),
-            None => rcrc,
-        }
-    }
-
-    let hostname = merge_hierarchy(partial_config.hostname, rcrc_config.hostname)
-        .ok_or("Couldn't get hostname")?;
+    let hostname = merge_hierarchy(partial_config.hostname, rcrc_config.hostname);
 
     Ok(Config {
         verbose,
@@ -249,8 +253,9 @@ fn find_rcrc(_partial_config: &PartialConfig) -> Option<PathBuf> {
 }
 
 pub fn get(cli_args: &clap::ArgMatches) -> Result<Config, Box<dyn error::Error>> {
-    let partial_config = merge_partial(get_cli(cli_args), get_default()?);
+    let partial_config = PartialConfig::merge(CliConfig::get(cli_args), DefaultConfig::get()?);
     let rcrc_config = rcrc::get(find_rcrc(&partial_config))?;
+    let config = merge_rcrc(partial_config, rcrc_config)?;
 
-    merge_rcrc(partial_config, rcrc_config)
+    Ok(config)
 }
