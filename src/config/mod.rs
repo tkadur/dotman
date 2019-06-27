@@ -12,6 +12,9 @@ use std::{
 };
 use walkdir::WalkDir;
 
+const DEFAULT_DOTFILES_DIR: &str = ".dotfiles";
+const RCRC_NAME: &str = ".rcrc.toml";
+
 #[derive(Debug, From)]
 pub enum Error {
     NoSystemHostname,
@@ -57,7 +60,7 @@ pub struct Config {
     hostname: String,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 enum PartialSource {
     Cli,
     Default,
@@ -89,6 +92,22 @@ impl PartialConfig {
         let hostname = merge_with_source(cli.hostname, default.config.hostname);
 
         PartialConfig {
+            verbose,
+            excludes,
+            tags,
+            dotfiles_path,
+            hostname,
+        }
+    }
+
+    fn to_config(&self) -> Config {
+        let verbose = self.verbose;
+        let excludes = self.excludes.clone();
+        let tags = self.tags.clone();
+        let (dotfiles_path, _) = self.dotfiles_path.clone();
+        let (hostname, _) = self.hostname.clone();
+
+        Config {
             verbose,
             excludes,
             tags,
@@ -147,7 +166,7 @@ impl DefaultConfig {
         let excludes = vec![];
         let tags = vec![];
 
-        let dotfiles_path = dirs::home_dir().ok_or(NoHomeDirectory)?.join("dotfiles");
+        let dotfiles_path = dirs::home_dir().ok_or(NoHomeDirectory)?.join(DEFAULT_DOTFILES_DIR);
 
         let hostname = gethostname().to_str().ok_or(NoSystemHostname)?.to_owned();
 
@@ -277,9 +296,23 @@ fn merge_rcrc(partial_config: PartialConfig, rcrc_config: rcrc::Config) -> Resul
     })
 }
 
-// TODO Finish
-fn find_rcrc(_partial_config: &PartialConfig) -> Option<PathBuf> {
-    dirs::home_dir().map(|home| home.join(".rcrc-test"))
+/// Given the partial config built from CLI arguments and default values, tries to
+/// find an rcrc within the files to be linked. For example, if the user has their rcrc
+/// in a `host-` folder matching the hostname in `partial_config`, it will be recognized
+/// and used as the rcrc. If no such rcrc is found, falls back to trying the default location
+/// in the home directory.
+fn find_rcrc(partial_config: &PartialConfig) -> Option<PathBuf> {
+    let config = partial_config.to_config();
+
+    let items = super::resolver::get(&config).ok()?;
+    for item in items {
+        match item.dest().file_name() {
+            Some(name) if name == RCRC_NAME => return Some(item.source().clone()),
+            _ => (),
+        }
+    }
+
+    dirs::home_dir().map(|home| home.join(RCRC_NAME))
 }
 
 pub fn get(cli_args: &clap::ArgMatches) -> Result<Config, Error> {

@@ -12,7 +12,7 @@ fn go() -> Result<(), Box<dyn error::Error>> {
     let config = config::get(&args)?;
     println!("{:#?}", config);
 
-    let paths = resolver::get(config)?;
+    let paths = resolver::get(&config)?;
     println!("{:#?}", paths);
 
     match args.subcommand() {

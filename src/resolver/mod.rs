@@ -1,8 +1,10 @@
 use super::config::Config;
 use derive_more::From;
+use derive_getters::Getters;
 use std::{
     collections::HashSet,
     error,
+    ffi::OsString,
     fmt::{self, Display},
     io, iter,
     path::{Path, PathBuf},
@@ -11,6 +13,7 @@ use walkdir::WalkDir;
 
 #[derive(Debug, From)]
 pub enum Error {
+    NoHomeDirectory,
     IoError(io::Error),
     WalkdirError(walkdir::Error),
 }
@@ -18,31 +21,41 @@ use self::Error::*;
 
 impl Display for Error {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        let (error_type, error_msg) = match self {
-            IoError(error) => ("reading from dotfiles directory", error.to_string()),
-            WalkdirError(error) => ("reading from dotfiles directory", error.to_string()),
+        let error_msg = match self {
+            NoHomeDirectory => String::from("finding home directory"),
+            IoError(error) => format!("reading from dotfiles directory ({})", error.to_string()),
+            WalkdirError(error) => format!("reading from dotfiles directory ({})", error.to_string()),
         };
 
-        write!(f, "error {} ({})", error_type, error_msg)
+        write!(f, "error {}", error_msg)
     }
 }
 
 impl error::Error for Error {
     fn source(&self) -> Option<&(dyn error::Error + 'static)> {
         match self {
+            NoHomeDirectory => None,
             IoError(error) => Some(error),
             WalkdirError(error) => Some(error),
         }
     }
 }
 
-/// Adds every non-hidden non-excluded file in `dir` (recursively, ignoring
-/// directories) to `res`.
-fn link_dir_contents(
-    dir: &Path,
-    excludes: &HashSet<&Path>,
-    res: &mut Vec<PathBuf>,
-) -> Result<(), Error> {
+#[derive(Debug, Getters)]
+pub struct Item {
+    source: PathBuf,
+    dest: PathBuf,
+}
+
+/// Returns every non-hidden non-excluded file in `dir` (recursively, ignoring
+/// directories).
+/// 
+/// Requires: `dir` is absolute
+fn link_dir_contents(dir: &Path, excludes: &HashSet<&Path>) -> Result<Vec<Item>, Error> {
+    debug_assert!(dir.is_absolute());
+
+    /// Checks if a entry's filename is not prefixed by a '.' character.
+    /// If the path cannot be read as a String, assume it isn't hidden.
     fn is_not_hidden(entry: &walkdir::DirEntry) -> bool {
         entry
             .file_name()
@@ -51,6 +64,19 @@ fn link_dir_contents(
             .unwrap_or(false)
     }
 
+    fn make_hidden(path: &Path) -> PathBuf {
+        let path_str = OsString::from(path.as_os_str());
+        let hidden_path = {
+            let mut hidden_path = OsString::from(".");
+            hidden_path.push(path_str);
+
+            hidden_path
+        };
+
+        PathBuf::from(hidden_path)
+    }
+
+    let mut res = vec![];
     for entry in WalkDir::new(dir).into_iter().filter_entry(is_not_hidden) {
         let entry = entry?;
         let entry_full_path = entry.path();
@@ -62,11 +88,17 @@ fn link_dir_contents(
         };
 
         if is_not_hidden(&entry) && entry.file_type().is_file() && !excludes.contains(path) {
-            res.push(PathBuf::from(entry_full_path));
+            let source = PathBuf::from(entry_full_path);
+            let dest = dirs::home_dir().ok_or(NoHomeDirectory)?.join(make_hidden(path));
+            res.push(Item { source, dest });
         }
     }
 
-    Ok(())
+    for item in &res {
+        debug_assert!(item.source.is_absolute());
+        debug_assert!(item.dest.is_absolute());
+    }
+    Ok(res)
 }
 
 /// Finds the items under `path` which are to be symlinked, according to all the
@@ -74,13 +106,13 @@ fn link_dir_contents(
 ///
 /// Requires: `path` is absolute
 ///
-/// Ensures: All paths in `res` are absolute
+/// Ensures: All paths in the output are absolute
 fn find_items(
     path: PathBuf,
     is_prefixed: &impl Fn(&Path) -> bool,
     active_prefixed_dirs: &HashSet<&Path>,
     excludes: &HashSet<&Path>,
-    res: &mut Vec<PathBuf>,
+    res: &mut Vec<Item>,
 ) -> Result<(), Error> {
     debug_assert!(path.is_absolute());
 
@@ -117,17 +149,19 @@ fn find_items(
                 )?;
             }
         } else {
-            link_dir_contents(&entry.path(), excludes, res)?;
+            let contents = link_dir_contents(&entry.path(), excludes)?;
+            res.extend(contents);
         }
     }
 
-    for path in res {
-        debug_assert!(path.is_absolute());
+    for item in res {
+        debug_assert!(item.source.is_absolute());
+        debug_assert!(item.dest.is_absolute());
     }
     Ok(())
 }
 
-pub fn get(config: Config) -> Result<Vec<PathBuf>, Error> {
+pub fn get(config: &Config) -> Result<Vec<Item>, Error> {
     let hostname_prefix = "host-";
     let tag_prefix = "tag-";
     let prefixes = [hostname_prefix, tag_prefix];
@@ -157,8 +191,6 @@ pub fn get(config: Config) -> Result<Vec<PathBuf>, Error> {
         .collect();
 
     let excludes = config.excludes().iter().map(|e| e.as_path()).collect();
-
-    println!("Excludes: {:?}", excludes);
 
     let mut res = vec![];
 
