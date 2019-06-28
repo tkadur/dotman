@@ -7,15 +7,15 @@
     {
       "type": "lldb",
       "request": "launch",
-      "name": "rcm-rs ls",
+      "name": "dotman ls",
       "cargo": {
         "args": [
           "build",
-          "--bin=rcm-rs",
-          "--package=rcm-rs"
+          "--bin=dotman",
+          "--package=dotman"
         ],
         "filter": {
-          "name": "rcm-rs",
+          "name": "dotman",
           "kind": "bin"
         }
       },
@@ -25,16 +25,16 @@
     {
       "type": "lldb",
       "request": "launch",
-      "name": "Debug unit tests in executable 'rcm-rs'",
+      "name": "Debug unit tests in executable 'dotman'",
       "cargo": {
         "args": [
           "test",
           "--no-run",
-          "--bin=rcm-rs",
-          "--package=rcm-rs"
+          "--bin=dotman",
+          "--package=dotman"
         ],
         "filter": {
-          "name": "rcm-rs",
+          "name": "dotman",
           "kind": "bin"
         }
       },

@@ -18,8 +18,8 @@ use self::Error::*;
 impl Display for Error {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         let (error_type, error_msg) = match self {
-            ParseError(error) => ("parsing .rcrc", error.to_string()),
-            IoError(error) => ("reading .rcrc", error.to_string()),
+            ParseError(error) => ("parsing .dotrc", error.to_string()),
+            IoError(error) => ("reading .dotrc", error.to_string()),
         };
 
         write!(f, "error {} ({})", error_type, error_msg)
@@ -37,7 +37,7 @@ impl error::Error for Error {
 
 #[derive(Debug, Default, Deserialize)]
 #[serde(deny_unknown_fields)]
-/// Configuration options available in rcrc
+/// Configuration options available in dotrc
 pub struct Config {
     pub excludes: Option<Vec<String>>,
     pub tags: Option<Vec<String>>,
@@ -46,14 +46,14 @@ pub struct Config {
     pub hostname: Option<String>,
 }
 
-/// Gets configuration options from the rcrc file.
+/// Gets configuration options from the dotrc file.
 ///
-/// The rcrc file not existing is _not_ considered an error,
-/// and will return an empty config. Failure to read the rcrc
-/// file or a malformed rcrc, on the other hand, _is_ considered
+/// The dotrc file not existing is _not_ considered an error,
+/// and will return an empty config. Failure to read the dotrc
+/// file or a malformed dotrc, on the other hand, _is_ considered
 /// an error.
-pub fn get(rcrc_path: Option<PathBuf>) -> Result<Config, Error> {
-    let path = match rcrc_path {
+pub fn get(dotrc_path: Option<PathBuf>) -> Result<Config, Error> {
+    let path = match dotrc_path {
         Some(path) => path,
         None => return Ok(Config::default()),
     };

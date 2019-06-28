@@ -1,4 +1,4 @@
-mod rcrc;
+mod dotrc;
 
 use derive_getters::Getters;
 use derive_more::From;
@@ -13,14 +13,14 @@ use std::{
 use walkdir::WalkDir;
 
 const DEFAULT_DOTFILES_DIR: &str = ".dotfiles";
-const RCRC_NAME: &str = ".rcrc.toml";
+const DOTRC_NAME: &str = ".dotrc.toml";
 
 #[derive(Debug, From)]
 pub enum Error {
     NoSystemHostname,
     NoHomeDirectory,
     WalkdirError(walkdir::Error),
-    RcrcError(rcrc::Error),
+    DotrcError(dotrc::Error),
 }
 use self::Error::*;
 
@@ -30,7 +30,7 @@ impl Display for Error {
             NoSystemHostname => String::from("reading system hostname"),
             NoHomeDirectory => String::from("finding home directory"),
             WalkdirError(error) => format!("reading file or directory ({})", error.to_string()),
-            RcrcError(error) => error.to_string(),
+            DotrcError(error) => error.to_string(),
         };
 
         write!(f, "error {}", error_msg)
@@ -41,16 +41,16 @@ impl error::Error for Error {
     fn source(&self) -> Option<&(dyn error::Error + 'static)> {
         match self {
             WalkdirError(error) => Some(error),
-            RcrcError(error) => Some(error),
+            DotrcError(error) => Some(error),
             NoSystemHostname | NoHomeDirectory => None,
         }
     }
 }
 
-/// All rcm configuration options
-// `rcrc::Config` is more "raw" than this because it's meant to be a direct translation
-// of the user's rcrc file. This type encompasses all possible configuration options,
-// so it eliminates the optional-ness of `rcrc::Config`'s fields
+/// All dotman configuration options
+// `dotrc::Config` is more "raw" than this because it's meant to be a direct translation
+// of the user's dotrc file. This type encompasses all possible configuration options,
+// so it eliminates the optional-ness of `dotrc::Config`'s fields
 #[derive(Debug, Getters)]
 pub struct Config {
     verbose: bool,
@@ -191,17 +191,17 @@ fn merge_vecs<T>(x: Vec<T>, mut y: Vec<T>) -> Vec<T> {
     res
 }
 
-fn merge_rcrc(partial_config: PartialConfig, rcrc_config: rcrc::Config) -> Result<Config, Error> {
+fn merge_dotrc(partial_config: PartialConfig, dotrc_config: dotrc::Config) -> Result<Config, Error> {
     let verbose = partial_config.verbose;
 
     // Makes sure to respect the hierarchy of selecting in the following order
     // - CLI
-    // - rcrc
+    // - dotrc
     // - Default source
-    fn merge_hierarchy<T>(partial: (T, PartialSource), rcrc: Option<T>) -> T {
+    fn merge_hierarchy<T>(partial: (T, PartialSource), dotrc: Option<T>) -> T {
         match partial {
             (x, PartialSource::Cli) => x,
-            (x, PartialSource::Default) => rcrc.unwrap_or(x),
+            (x, PartialSource::Default) => dotrc.unwrap_or(x),
         }
     }
     let dotfiles_path = {
@@ -215,23 +215,23 @@ fn merge_rcrc(partial_config: PartialConfig, rcrc_config: rcrc::Config) -> Resul
             )
         }
 
-        let rcrc_dotfiles_path = rcrc_config
+        let dotrc_dotfiles_path = dotrc_config
             .dotfiles_path
             .and_then(expand_tilde)
             .map(PathBuf::from);
 
-        merge_hierarchy(partial_config.dotfiles_path, rcrc_dotfiles_path)
+        merge_hierarchy(partial_config.dotfiles_path, dotrc_dotfiles_path)
     };
     debug_assert!(dotfiles_path.is_absolute());
 
     let excludes = {
         let mut excludes: Vec<PathBuf> =
-            // Merge the excludes from partial_config (CLI + default) with the excludes from the rcrc
+            // Merge the excludes from partial_config (CLI + default) with the excludes from the dotrc
             merge_vecs(
                 partial_config.excludes,
-                // We need to handle the possibility of the rcrc not specifying any excludes,
+                // We need to handle the possibility of the dotrc not specifying any excludes,
                 // as well as converting from the raw String input to a PathBuf
-                rcrc_config
+                dotrc_config
                     .excludes
                     .unwrap_or_else(|| vec![])
                     .iter()
@@ -284,10 +284,10 @@ fn merge_rcrc(partial_config: PartialConfig, rcrc_config: rcrc::Config) -> Resul
 
     let tags = merge_vecs(
         partial_config.tags,
-        rcrc_config.tags.unwrap_or_else(|| vec![]),
+        dotrc_config.tags.unwrap_or_else(|| vec![]),
     );
 
-    let hostname = merge_hierarchy(partial_config.hostname, rcrc_config.hostname);
+    let hostname = merge_hierarchy(partial_config.hostname, dotrc_config.hostname);
 
     Ok(Config {
         verbose,
@@ -299,28 +299,28 @@ fn merge_rcrc(partial_config: PartialConfig, rcrc_config: rcrc::Config) -> Resul
 }
 
 /// Given the partial config built from CLI arguments and default values, tries
-/// to find an rcrc within the files to be linked. For example, if the user has
-/// their rcrc in a `host-` folder matching the hostname in `partial_config`, it
-/// will be recognized and used as the rcrc. If no such rcrc is found, falls
+/// to find an dotrc within the files to be linked. For example, if the user has
+/// their dotrc in a `host-` folder matching the hostname in `partial_config`, it
+/// will be recognized and used as the dotrc. If no such dotrc is found, falls
 /// back to trying the default location in the home directory.
-fn find_rcrc(partial_config: &PartialConfig) -> Option<PathBuf> {
+fn find_dotrc(partial_config: &PartialConfig) -> Option<PathBuf> {
     let config = partial_config.to_config();
 
     let items = super::resolver::get(&config).ok()?;
     for item in items {
         match item.dest().file_name() {
-            Some(name) if name == RCRC_NAME => return Some(item.source().clone()),
+            Some(name) if name == DOTRC_NAME => return Some(item.source().clone()),
             _ => (),
         }
     }
 
-    dirs::home_dir().map(|home| home.join(RCRC_NAME))
+    dirs::home_dir().map(|home| home.join(DOTRC_NAME))
 }
 
 pub fn get(cli_args: &clap::ArgMatches) -> Result<Config, Error> {
     let partial_config = PartialConfig::merge(CliConfig::get(cli_args), DefaultConfig::get()?);
-    let rcrc_config = rcrc::get(find_rcrc(&partial_config))?;
-    let config = merge_rcrc(partial_config, rcrc_config)?;
+    let dotrc_config = dotrc::get(find_dotrc(&partial_config))?;
+    let config = merge_dotrc(partial_config, dotrc_config)?;
 
     Ok(config)
 }
