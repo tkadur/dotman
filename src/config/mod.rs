@@ -1,5 +1,6 @@
 mod dotrc;
 
+use crate::common::util;
 use derive_getters::Getters;
 use derive_more::From;
 use gethostname::gethostname;
@@ -48,9 +49,6 @@ impl error::Error for Error {
 }
 
 /// All dotman configuration options
-// `dotrc::Config` is more "raw" than this because it's meant to be a direct translation
-// of the user's dotrc file. This type encompasses all possible configuration options,
-// so it eliminates the optional-ness of `dotrc::Config`'s fields
 #[derive(Debug, Getters)]
 pub struct Config {
     verbose: bool,
@@ -66,6 +64,8 @@ enum PartialSource {
     Default,
 }
 
+/// Configuration options sans dotrc
+/// Can be used to guide dotrc discovery with `find_rcrc`.
 #[derive(Debug)]
 struct PartialConfig {
     verbose: bool,
@@ -77,17 +77,21 @@ struct PartialConfig {
 
 impl PartialConfig {
     fn merge(cli: CliConfig, default: DefaultConfig) -> Self {
-        let verbose = cli.verbose.unwrap_or(default.config.verbose);
-        let excludes = merge_vecs(
-            cli.excludes.unwrap_or_else(|| vec![]),
-            default.config.excludes,
-        );
-        let tags = merge_vecs(cli.tags.unwrap_or_else(|| vec![]), default.config.tags);
-
+        /// Combines a single CLI item and a single default item, annotating the
+        /// result with its source
         fn merge_with_source<T>(cli: Option<T>, default: T) -> (T, PartialSource) {
             cli.map(|c| (c, PartialSource::Cli))
                 .unwrap_or((default, PartialSource::Default))
         }
+
+        let verbose = cli.verbose.unwrap_or(default.config.verbose);
+
+        let excludes = util::append_vecs(
+            cli.excludes.unwrap_or_else(|| vec![]),
+            default.config.excludes,
+        );
+        let tags = util::append_vecs(cli.tags.unwrap_or_else(|| vec![]), default.config.tags);
+
         let dotfiles_path = merge_with_source(cli.dotfiles_path, default.config.dotfiles_path);
         let hostname = merge_with_source(cli.hostname, default.config.hostname);
 
@@ -131,15 +135,12 @@ impl CliConfig {
     fn get(args: &clap::ArgMatches) -> Self {
         let verbose = Some(args.is_present("verbose"));
 
-        fn values_to_vec<'a, T>(
-            args: &'a clap::ArgMatches,
-            name: &str,
-            f: impl Fn(&'a str) -> T,
-        ) -> Option<Vec<T>> {
-            args.values_of(name).map(|e| e.map(f).collect())
-        }
-        let excludes = values_to_vec(args, "excludes", PathBuf::from);
-        let tags = values_to_vec(args, "tags", String::from);
+        let excludes = args
+            .values_of("excludes")
+            .map(|e| e.map(PathBuf::from).collect());
+        let tags = args
+            .values_of("tags")
+            .map(|t| t.map(String::from).collect());
 
         let dotfiles_path = args.value_of("dotfiles_path").map(PathBuf::from);
         let hostname = args.value_of("hostname").map(String::from);
@@ -184,37 +185,42 @@ impl DefaultConfig {
     }
 }
 
-fn merge_vecs<T>(x: Vec<T>, mut y: Vec<T>) -> Vec<T> {
-    let mut res = x;
-    res.append(&mut y);
-
-    res
-}
-
-fn merge_dotrc(partial_config: PartialConfig, dotrc_config: dotrc::Config) -> Result<Config, Error> {
+/// Merges a partial config (obtained from the CLI and default settings) with a
+/// config obtained from reading the dotrc to create a complete configuration.
+fn merge_dotrc(
+    partial_config: PartialConfig,
+    dotrc_config: dotrc::Config,
+) -> Result<Config, Error> {
     let verbose = partial_config.verbose;
 
-    // Makes sure to respect the hierarchy of selecting in the following order
-    // - CLI
-    // - dotrc
-    // - Default source
+    /// Merges an item from a `PartialConfig` and an item from a
+    /// `dotrc::Config`, making sure to respect the hierarchy of selecting
+    /// in the following order
+    /// - CLI
+    /// - dotrc
+    /// - Default source
     fn merge_hierarchy<T>(partial: (T, PartialSource), dotrc: Option<T>) -> T {
         match partial {
             (x, PartialSource::Cli) => x,
             (x, PartialSource::Default) => dotrc.unwrap_or(x),
         }
     }
-    let dotfiles_path = {
-        fn expand_tilde(path: String) -> Option<String> {
-            Some(
-                if path.starts_with('~') {
-                    path.replacen("~", dirs::home_dir()?.to_str()?, 1)
-                } else {
-                    path
-                },
-            )
-        }
 
+    /// If `path` begins with a tilde, attempts to expand it into the
+    /// full home directory path. If `path` doesn't start with a tilde, just
+    /// successfully returns path. Fails if the home directory cannot
+    /// be read as a `String`.
+    fn expand_tilde(path: String) -> Option<String> {
+        Some(
+            if path.starts_with('~') {
+                path.replacen("~", dirs::home_dir()?.to_str()?, 1)
+            } else {
+                path
+            },
+        )
+    }
+
+    let dotfiles_path = {
         let dotrc_dotfiles_path = dotrc_config
             .dotfiles_path
             .and_then(expand_tilde)
@@ -227,7 +233,7 @@ fn merge_dotrc(partial_config: PartialConfig, dotrc_config: dotrc::Config) -> Re
     let excludes = {
         let mut excludes: Vec<PathBuf> =
             // Merge the excludes from partial_config (CLI + default) with the excludes from the dotrc
-            merge_vecs(
+            util::append_vecs(
                 partial_config.excludes,
                 // We need to handle the possibility of the dotrc not specifying any excludes,
                 // as well as converting from the raw String input to a PathBuf
@@ -275,14 +281,14 @@ fn merge_dotrc(partial_config: PartialConfig, dotrc_config: dotrc::Config) -> Re
             .flatten()
             .collect();
 
-        // Finally, remove any duplicate entries from files matching multiple globs
+        // Finally, remove any duplicate entries due to files matching multiple globs
         let set: HashSet<_> = excludes.drain(..).collect();
         excludes.extend(set.into_iter());
 
         excludes
     };
 
-    let tags = merge_vecs(
+    let tags = util::append_vecs(
         partial_config.tags,
         dotrc_config.tags.unwrap_or_else(|| vec![]),
     );
@@ -299,10 +305,13 @@ fn merge_dotrc(partial_config: PartialConfig, dotrc_config: dotrc::Config) -> Re
 }
 
 /// Given the partial config built from CLI arguments and default values, tries
-/// to find an dotrc within the files to be linked. For example, if the user has
-/// their dotrc in a `host-` folder matching the hostname in `partial_config`, it
-/// will be recognized and used as the dotrc. If no such dotrc is found, falls
-/// back to trying the default location in the home directory.
+/// to find the dotrc file.
+///
+/// Searches the following locations, in order:
+/// - The `host-` folder matching the hostname in `partial_config`
+/// - Any `tag-` folders matching the tags in `partial_config` (the tags are
+///   searched in an unspecified order)
+/// - The default location (`~/.dotrc`)
 fn find_dotrc(partial_config: &PartialConfig) -> Option<PathBuf> {
     let config = partial_config.to_config();
 

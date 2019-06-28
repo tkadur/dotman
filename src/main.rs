@@ -1,5 +1,6 @@
 #![warn(clippy::all)]
 
+mod common;
 mod config;
 mod resolver;
 

@@ -15,13 +15,13 @@ use walkdir::WalkDir;
 #[derive(Debug, From)]
 pub enum Error {
     NoHomeDirectory,
-    IoError(io::Error),
-    WalkdirError(walkdir::Error),
     /// Indicates when there are multiple active sources pointing to the same
     /// destination.
     DuplicateFiles {
         dest: PathBuf,
     },
+    IoError(io::Error),
+    WalkdirError(walkdir::Error),
 }
 use self::Error::*;
 
@@ -29,6 +29,9 @@ impl Display for Error {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         let error_msg = match self {
             NoHomeDirectory => String::from("can't find home directory"),
+            DuplicateFiles { dest } => {
+                format!("multiple source files for destination {}", dest.display())
+            },
             IoError(error) => format!(
                 "error eading from dotfiles directory ({})",
                 error.to_string()
@@ -37,9 +40,6 @@ impl Display for Error {
                 "error reading from dotfiles directory ({})",
                 error.to_string()
             ),
-            DuplicateFiles { dest } => {
-                format!("multiple source files for destination {}", dest.display())
-            },
         };
 
         write!(f, "{}", error_msg)
@@ -120,7 +120,13 @@ impl<'a> Display for ItemList<'a> {
             .iter()
             .zip(dests.iter())
             .map(|(source, dest)| {
-                writeln!(f, "{:width$}  ->  {}", source, dest, width = max_source_len)
+                writeln!(
+                    f,
+                    "{:width$}  ->    {}",
+                    source,
+                    dest,
+                    width = max_source_len
+                )
             })
             .collect()
     }
