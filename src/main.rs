@@ -12,8 +12,8 @@ fn go() -> Result<(), Box<dyn error::Error>> {
     let config = config::get(&args)?;
     println!("{:#?}", config);
 
-    let paths = resolver::get(&config)?;
-    println!("{:#?}", paths);
+    let items = resolver::get(&config)?;
+    println!("{}", resolver::display_items(&items));
 
     match args.subcommand() {
         ("link", Some(_sub_args)) => (),

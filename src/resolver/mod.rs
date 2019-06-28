@@ -1,6 +1,7 @@
 use super::config::Config;
-use derive_more::From;
+
 use derive_getters::Getters;
+use derive_more::From;
 use std::{
     collections::HashSet,
     error,
@@ -16,25 +17,39 @@ pub enum Error {
     NoHomeDirectory,
     IoError(io::Error),
     WalkdirError(walkdir::Error),
+    /// Indicates when there are multiple active sources pointing to the same
+    /// destination.
+    DuplicateFiles {
+        dest: PathBuf,
+    },
 }
 use self::Error::*;
 
 impl Display for Error {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         let error_msg = match self {
-            NoHomeDirectory => String::from("finding home directory"),
-            IoError(error) => format!("reading from dotfiles directory ({})", error.to_string()),
-            WalkdirError(error) => format!("reading from dotfiles directory ({})", error.to_string()),
+            NoHomeDirectory => String::from("can't find home directory"),
+            IoError(error) => format!(
+                "error eading from dotfiles directory ({})",
+                error.to_string()
+            ),
+            WalkdirError(error) => format!(
+                "error reading from dotfiles directory ({})",
+                error.to_string()
+            ),
+            DuplicateFiles { dest } => {
+                format!("multiple source files for destination {}", dest.display())
+            },
         };
 
-        write!(f, "error {}", error_msg)
+        write!(f, "{}", error_msg)
     }
 }
 
 impl error::Error for Error {
     fn source(&self) -> Option<&(dyn error::Error + 'static)> {
         match self {
-            NoHomeDirectory => None,
+            NoHomeDirectory | DuplicateFiles { .. } => None,
             IoError(error) => Some(error),
             WalkdirError(error) => Some(error),
         }
@@ -47,9 +62,76 @@ pub struct Item {
     dest: PathBuf,
 }
 
+/// Tries to replace absolute paths of the home directory
+/// with a tilde for readability. If that fails for any reason, just
+/// return `path`.
+fn home_to_tilde(path: &Path) -> PathBuf {
+    let home_dir = match dirs::home_dir() {
+        Some(home_dir) => home_dir,
+        None => return PathBuf::from(path),
+    };
+
+    let relative_path = match path.strip_prefix(home_dir) {
+        Ok(relative_path) => relative_path,
+        Err(_) => return PathBuf::from(path),
+    };
+
+    PathBuf::from("~").join(relative_path)
+}
+
+impl Item {
+    fn display_source(&self) -> impl Display {
+        format!("{}", home_to_tilde(&self.source).display())
+    }
+
+    fn display_dest(&self) -> impl Display {
+        format!("{}", home_to_tilde(&self.dest).display())
+    }
+}
+
+impl Display for Item {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{} -> {}", self.display_source(), self.display_dest())
+    }
+}
+
+struct ItemList<'a> {
+    items: &'a [Item],
+}
+
+impl<'a> Display for ItemList<'a> {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        let (sources, dests): (Vec<_>, Vec<_>) = self
+            .items
+            .iter()
+            .map(|item| {
+                (
+                    format!("{}", item.display_source()),
+                    format!("{}", item.display_dest()),
+                )
+            })
+            .unzip();
+
+        let max_source_len = sources.iter().map(|source| source.len()).max().unwrap_or(0);
+
+        sources
+            .iter()
+            .zip(dests.iter())
+            .map(|(source, dest)| {
+                writeln!(f, "{:width$}  ->  {}", source, dest, width = max_source_len)
+            })
+            .collect()
+    }
+}
+
+/// Display multiple items in a cleaner way than displaying them individually
+pub fn display_items<'a>(items: &'a [Item]) -> impl Display + 'a {
+    ItemList { items }
+}
+
 /// Returns every non-hidden non-excluded file in `dir` (recursively, ignoring
 /// directories).
-/// 
+///
 /// Requires: `dir` is absolute
 fn link_dir_contents(dir: &Path, excludes: &HashSet<&Path>) -> Result<Vec<Item>, Error> {
     debug_assert!(dir.is_absolute());
@@ -89,7 +171,9 @@ fn link_dir_contents(dir: &Path, excludes: &HashSet<&Path>) -> Result<Vec<Item>,
 
         if is_not_hidden(&entry) && entry.file_type().is_file() && !excludes.contains(path) {
             let source = PathBuf::from(entry_full_path);
-            let dest = dirs::home_dir().ok_or(NoHomeDirectory)?.join(make_hidden(path));
+            let dest = dirs::home_dir()
+                .ok_or(NoHomeDirectory)?
+                .join(make_hidden(path));
             res.push(Item { source, dest });
         }
     }
@@ -201,6 +285,17 @@ pub fn get(config: &Config) -> Result<Vec<Item>, Error> {
         &excludes,
         &mut res,
     )?;
+
+    // Check for duplicate destinations
+    let mut seen = HashSet::new();
+    for item in &res {
+        let dest = item.dest.clone();
+        if seen.contains(&dest) {
+            return Err(DuplicateFiles { dest });
+        } else {
+            seen.insert(dest);
+        }
+    }
 
     Ok(res)
 }

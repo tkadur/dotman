@@ -166,7 +166,9 @@ impl DefaultConfig {
         let excludes = vec![];
         let tags = vec![];
 
-        let dotfiles_path = dirs::home_dir().ok_or(NoHomeDirectory)?.join(DEFAULT_DOTFILES_DIR);
+        let dotfiles_path = dirs::home_dir()
+            .ok_or(NoHomeDirectory)?
+            .join(DEFAULT_DOTFILES_DIR);
 
         let hostname = gethostname().to_str().ok_or(NoSystemHostname)?.to_owned();
 
@@ -296,11 +298,11 @@ fn merge_rcrc(partial_config: PartialConfig, rcrc_config: rcrc::Config) -> Resul
     })
 }
 
-/// Given the partial config built from CLI arguments and default values, tries to
-/// find an rcrc within the files to be linked. For example, if the user has their rcrc
-/// in a `host-` folder matching the hostname in `partial_config`, it will be recognized
-/// and used as the rcrc. If no such rcrc is found, falls back to trying the default location
-/// in the home directory.
+/// Given the partial config built from CLI arguments and default values, tries
+/// to find an rcrc within the files to be linked. For example, if the user has
+/// their rcrc in a `host-` folder matching the hostname in `partial_config`, it
+/// will be recognized and used as the rcrc. If no such rcrc is found, falls
+/// back to trying the default location in the home directory.
 fn find_rcrc(partial_config: &PartialConfig) -> Option<PathBuf> {
     let config = partial_config.to_config();
 
