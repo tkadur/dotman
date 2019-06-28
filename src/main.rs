@@ -10,14 +10,11 @@ fn go() -> Result<(), Box<dyn error::Error>> {
     let args = clap::App::from_yaml(yaml).get_matches();
 
     let config = config::get(&args)?;
-    println!("{:#?}", config);
-
     let items = resolver::get(&config)?;
-    println!("{}", resolver::display_items(&items));
 
     match args.subcommand() {
         ("link", Some(_sub_args)) => (),
-        ("ls", Some(_sub_args)) => (),
+        ("ls", Some(_)) => println!("{}", resolver::display_items(&items)),
         _ => unreachable!(),
     }
 

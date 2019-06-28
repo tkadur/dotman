@@ -95,6 +95,8 @@ impl Display for Item {
     }
 }
 
+/// Just a wrapper for pretty-printing multiple `Item`s by aligning the
+/// arrows in the output
 struct ItemList<'a> {
     items: &'a [Item],
 }
