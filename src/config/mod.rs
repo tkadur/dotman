@@ -28,13 +28,15 @@ use self::Error::*;
 impl Display for Error {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         let error_msg = match self {
-            NoSystemHostname => String::from("reading system hostname"),
-            NoHomeDirectory => String::from("finding home directory"),
-            WalkdirError(error) => format!("reading file or directory ({})", error.to_string()),
+            NoSystemHostname => String::from("error reading system hostname"),
+            NoHomeDirectory => String::from("error finding home directory"),
+            WalkdirError(error) => {
+                format!("error reading file or directory ({})", error.to_string())
+            },
             DotrcError(error) => error.to_string(),
         };
 
-        write!(f, "error {}", error_msg)
+        write!(f, "{}", error_msg)
     }
 }
 
@@ -64,7 +66,8 @@ enum PartialSource {
     Default,
 }
 
-/// Configuration options sans dotrc
+/// Configuration options sans dotrc.
+///
 /// Can be used to guide dotrc discovery with `find_rcrc`.
 #[derive(Debug)]
 struct PartialConfig {
@@ -121,6 +124,8 @@ impl PartialConfig {
     }
 }
 
+/// The portion of the configuration read from CLI arguments and
+/// environment variables
 #[derive(Debug)]
 struct CliConfig {
     verbose: Option<bool>,
@@ -315,7 +320,7 @@ fn merge_dotrc(
 fn find_dotrc(partial_config: &PartialConfig) -> Option<PathBuf> {
     let config = partial_config.to_config();
 
-    let items = super::resolver::get(&config).ok()?;
+    let items = crate::resolver::get(&config).ok()?;
     for item in items {
         match item.dest().file_name() {
             Some(name) if name == DOTRC_NAME => return Some(item.source().clone()),

@@ -17,12 +17,12 @@ use self::Error::*;
 
 impl Display for Error {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        let (error_type, error_msg) = match self {
-            ParseError(error) => ("parsing .dotrc", error.to_string()),
-            IoError(error) => ("reading .dotrc", error.to_string()),
+        let error_msg = match self {
+            ParseError(error) => format!("error parsing .dotrc ({})", error),
+            IoError(error) => format!("error reading .dotrc ({})", error),
         };
 
-        write!(f, "error {} ({})", error_type, error_msg)
+        write!(f, "{}", error_msg)
     }
 }
 
@@ -58,12 +58,13 @@ pub fn get(dotrc_path: Option<PathBuf>) -> Result<Config, Error> {
         None => return Ok(Config::default()),
     };
 
-    let contents = {
-        let mut file = match fs::File::open(path) {
-            Ok(file) => file,
-            Err(_) => return Ok(Config::default()),
-        };
+    let file = match fs::File::open(path) {
+        Ok(file) => file,
+        Err(_) => return Ok(Config::default()),
+    };
 
+    let contents = {
+        let mut file = file;
         let mut contents = String::new();
         file.read_to_string(&mut contents)?;
 
