@@ -5,16 +5,16 @@ use crate::{
 use derive_more::From;
 use std::{
     error,
-    path::PathBuf,
     fmt::{self, Display},
     fs,
     io::{self, Write},
+    path::PathBuf,
 };
 
 #[derive(Debug, From)]
 pub enum Error {
     IoError(io::Error),
-    DirectoryOverwrite(PathBuf)
+    DirectoryOverwrite(PathBuf),
 }
 use self::Error::*;
 
@@ -22,7 +22,10 @@ impl Display for Error {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         let error_msg = match self {
             IoError(error) => format!("error creating symlinks ({})", error),
-            DirectoryOverwrite(path) => format!("won't delete directory {}. Please remove it manually if you want.", path.display()),
+            DirectoryOverwrite(path) => format!(
+                "won't delete directory {}. Please remove it manually if you want.",
+                path.display()
+            ),
         };
 
         write!(f, "{}", error_msg)
@@ -41,7 +44,9 @@ impl error::Error for Error {
 #[cfg(unix)]
 fn link(item: &FormattedItem) -> Result<(), Error> {
     verbose_println!("Linking {}", item);
+    let dest = item.dest();
 
+    fs::create_dir_all(dest.parent().unwrap_or(dest))?;
     std::os::unix::fs::symlink(item.source(), item.dest())?;
 
     Ok(())

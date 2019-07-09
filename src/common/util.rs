@@ -38,7 +38,7 @@ pub enum FileType {
 use FileType::*;
 
 pub fn file_type(path: impl AsRef<Path>) -> io::Result<FileType> {
-    let file_type = path.as_ref().metadata()?.file_type();
+    let file_type = path.as_ref().symlink_metadata()?.file_type();
 
     Ok(if file_type.is_file() {
         File

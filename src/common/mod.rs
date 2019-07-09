@@ -15,6 +15,9 @@ pub struct Item {
 
 impl Item {
     pub fn new(source: PathBuf, dest: PathBuf) -> Self {
+        debug_assert!(source.is_absolute());
+        debug_assert!(source.is_absolute());
+
         Item { source, dest }
     }
 
