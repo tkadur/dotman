@@ -1,22 +1,24 @@
 #![warn(clippy::all)]
 
+#[macro_use]
 mod common;
 mod config;
+mod linker;
 mod resolver;
 
-use common::util;
+use common::{util, FormattedItems};
 use std::error;
 
-enum Subcommand<'a> {
-    Link { sub_args: &'a clap::ArgMatches<'a> },
+enum Subcommand {
+    Link,
     Ls,
 }
 use self::Subcommand::*;
 
-impl<'a> Subcommand<'a> {
-    fn get(args: &'a clap::ArgMatches<'a>) -> Subcommand<'a> {
+impl Subcommand {
+    fn from_args(args: &clap::ArgMatches) -> Subcommand {
         match args.subcommand() {
-            ("link", Some(sub_args)) => Link { sub_args },
+            ("link", _) => Link,
             ("ls", _) => Ls,
             _ => unreachable!(),
         }
@@ -26,13 +28,16 @@ impl<'a> Subcommand<'a> {
 fn go() -> Result<(), Box<dyn error::Error>> {
     let yaml = clap::load_yaml!("cli.yml");
     let args = clap::App::from_yaml(yaml).get_matches();
+    util::set_verbosity(args.is_present("verbose"));
 
     let config = config::get(&args)?;
-    let items = resolver::get(&config)?;
+    verbose_println!("");
+    let items = FormattedItems::from_items(resolver::get(&config)?);
+    verbose_println!("");
 
-    match Subcommand::get(&args) {
-        Link { .. } => (),
-        Ls => println!("{}", util::display_items(&items)),
+    match Subcommand::from_args(&args) {
+        Link => linker::link_items(items)?,
+        Ls => println!("{}", items),
     }
 
     Ok(())

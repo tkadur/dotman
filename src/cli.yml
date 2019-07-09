@@ -30,7 +30,8 @@ args:
     - verbose:
         short: v
         long: verbose
-        help: Enables verbose output.
+        help: Enables verbose output. Can be specified multiple times for increased verbosity.
+        multiple: true
 
 subcommands:
     - link:

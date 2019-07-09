@@ -1,7 +1,8 @@
-use crate::common::Item;
 use std::{
-    fmt::{self, Display},
+    io,
+    ops::Drop,
     path::{Path, PathBuf},
+    sync::atomic::{AtomicBool, Ordering},
 };
 
 /// Efficiently appends two `Vec`s together
@@ -29,44 +30,94 @@ pub fn home_to_tilde(path: &Path) -> PathBuf {
     PathBuf::from("~").join(relative_path)
 }
 
-/// Just a wrapper for pretty-printing multiple `Item`s by aligning the
-/// arrows in the output
-struct ItemList<'a> {
-    items: &'a [Item],
+pub enum FileType {
+    File,
+    Directory,
+    Symlink,
+}
+use FileType::*;
+
+pub fn file_type(path: impl AsRef<Path>) -> io::Result<FileType> {
+    let file_type = path.as_ref().metadata()?.file_type();
+
+    Ok(if file_type.is_file() {
+        File
+    } else if file_type.is_dir() {
+        Directory
+    } else if file_type.is_symlink() {
+        Symlink
+    } else {
+        unreachable!()
+    })
 }
 
-impl<'a> Display for ItemList<'a> {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        let (sources, dests): (Vec<_>, Vec<_>) = self
-            .items
-            .iter()
-            .map(|item| {
-                (
-                    format!("{}", item.display_source()),
-                    format!("{}", item.display_dest()),
-                )
-            })
-            .unzip();
+static VERBOSE: AtomicBool = AtomicBool::new(false);
 
-        let max_source_len = sources.iter().map(|source| source.len()).max().unwrap_or(0);
+pub fn set_verbosity(verbosity: bool) {
+    VERBOSE.store(verbosity, Ordering::SeqCst);
+}
 
-        sources
-            .iter()
-            .zip(dests.iter())
-            .map(|(source, dest)| {
-                writeln!(
-                    f,
-                    "{:width$}  ->    {}",
-                    source,
-                    dest,
-                    width = max_source_len
-                )
-            })
-            .collect()
+pub fn get_verbosity() -> bool {
+    VERBOSE.load(Ordering::SeqCst)
+}
+
+pub struct WithVerbosity {
+    old_verbosity: bool,
+}
+
+impl Drop for WithVerbosity {
+    fn drop(&mut self) {
+        set_verbosity(self.old_verbosity);
     }
 }
 
-/// Display multiple items in a cleaner way than displaying them individually
-pub fn display_items<'a>(items: &'a [Item]) -> impl Display + 'a {
-    ItemList { items }
+/// Sets the verbosity to `verbosity` within the current scope.
+/// Returns an RAII object which resets the verbosity when it gets dropped.
+///
+/// Example usage:
+/// ```
+/// set_verbosity(true);
+///
+/// # assert_eq!(get_verbosity(), true);
+/// // Make sure verbosity is off for this part
+/// {
+///     let _x = with_verbosity(false);
+///     # assert_eq!(get_verbosity(), false);
+///
+///     // Actually, turn verbosity back on for a bit
+///     {
+///         let _x = with_verbosity(true);
+///         # assert_eq!(get_verbosity(), true);
+///     }
+///     // Verbosity gets turned back off
+///     # assert_eq!(get_verbosity(), false);
+/// }
+/// // Verbosity gets turned back in
+/// # assert_eq!(get_verbosity(), true);
+/// ```
+pub fn with_verbosity(verbosity: bool) -> WithVerbosity {
+    let res = WithVerbosity {
+        old_verbosity: get_verbosity(),
+    };
+    set_verbosity(verbosity);
+
+    res
+}
+
+#[macro_export]
+macro_rules! verbose_print {
+     ($($args:tt)*) => {
+         if crate::common::util::get_verbosity() {
+             print!($($args)*);
+         }
+     }
+}
+
+#[macro_export]
+macro_rules! verbose_println {
+     ($($args:tt)*) => {
+         if crate::common::util::get_verbosity() {
+             println!($($args)*);
+         }
+     }
 }

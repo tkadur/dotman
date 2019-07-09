@@ -1,6 +1,6 @@
 mod dotrc;
 
-use crate::common::util;
+use crate::{common::util, verbose_println};
 use derive_getters::Getters;
 use derive_more::From;
 use gethostname::gethostname;
@@ -53,11 +53,20 @@ impl error::Error for Error {
 /// All dotman configuration options
 #[derive(Debug, Getters)]
 pub struct Config {
-    verbose: bool,
     excludes: Vec<PathBuf>,
     tags: Vec<String>,
     dotfiles_path: PathBuf,
     hostname: String,
+}
+
+impl Config {
+    // Checks that all of `Config`'s invariants hold
+    fn validate(&self) {
+        for exclude in &self.excludes {
+            debug_assert!(exclude.is_absolute());
+        }
+        debug_assert!(self.dotfiles_path.is_absolute());
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -71,7 +80,6 @@ enum PartialSource {
 /// Can be used to guide dotrc discovery with `find_rcrc`.
 #[derive(Debug)]
 struct PartialConfig {
-    verbose: bool,
     excludes: Vec<PathBuf>,
     tags: Vec<String>,
     dotfiles_path: (PathBuf, PartialSource),
@@ -87,8 +95,6 @@ impl PartialConfig {
                 .unwrap_or((default, PartialSource::Default))
         }
 
-        let verbose = cli.verbose.unwrap_or(default.config.verbose);
-
         let excludes = util::append_vecs(
             cli.excludes.unwrap_or_else(|| vec![]),
             default.config.excludes,
@@ -99,7 +105,6 @@ impl PartialConfig {
         let hostname = merge_with_source(cli.hostname, default.config.hostname);
 
         PartialConfig {
-            verbose,
             excludes,
             tags,
             dotfiles_path,
@@ -108,14 +113,12 @@ impl PartialConfig {
     }
 
     fn to_config(&self) -> Config {
-        let verbose = self.verbose;
         let excludes = self.excludes.clone();
         let tags = self.tags.clone();
         let (dotfiles_path, _) = self.dotfiles_path.clone();
         let (hostname, _) = self.hostname.clone();
 
         Config {
-            verbose,
             excludes,
             tags,
             dotfiles_path,
@@ -128,7 +131,6 @@ impl PartialConfig {
 /// environment variables
 #[derive(Debug)]
 struct CliConfig {
-    verbose: Option<bool>,
     excludes: Option<Vec<PathBuf>>,
     tags: Option<Vec<String>>,
     dotfiles_path: Option<PathBuf>,
@@ -138,8 +140,6 @@ struct CliConfig {
 impl CliConfig {
     /// Gets a partial configuration from CLI arguments.
     fn get(args: &clap::ArgMatches) -> Self {
-        let verbose = Some(args.is_present("verbose"));
-
         let excludes = args
             .values_of("excludes")
             .map(|e| e.map(PathBuf::from).collect());
@@ -151,7 +151,6 @@ impl CliConfig {
         let hostname = args.value_of("hostname").map(String::from);
 
         CliConfig {
-            verbose,
             excludes,
             tags,
             dotfiles_path,
@@ -168,7 +167,6 @@ impl DefaultConfig {
     /// Gets a partial configuration corresponding to the "default"
     /// values/sources of each configuration option.
     fn get() -> Result<DefaultConfig, Error> {
-        let verbose = false;
         let excludes = vec![];
         let tags = vec![];
 
@@ -180,7 +178,6 @@ impl DefaultConfig {
 
         Ok(DefaultConfig {
             config: Config {
-                verbose,
                 excludes,
                 tags,
                 dotfiles_path,
@@ -196,8 +193,6 @@ fn merge_dotrc(
     partial_config: PartialConfig,
     dotrc_config: dotrc::Config,
 ) -> Result<Config, Error> {
-    let verbose = partial_config.verbose;
-
     /// Merges an item from a `PartialConfig` and an item from a
     /// `dotrc::Config`, making sure to respect the hierarchy of selecting
     /// in the following order
@@ -233,7 +228,15 @@ fn merge_dotrc(
 
         merge_hierarchy(partial_config.dotfiles_path, dotrc_dotfiles_path)
     };
-    debug_assert!(dotfiles_path.is_absolute());
+
+    // Just to improve whitespace in verbose output about glob expansion
+    let mut had_glob_output = false;
+    let mut glob_output = || {
+        if !had_glob_output {
+            had_glob_output = true;
+            verbose_println!("");
+        }
+    };
 
     let excludes = {
         let mut excludes: Vec<PathBuf> =
@@ -256,7 +259,11 @@ fn merge_dotrc(
             .map(|path: PathBuf| -> Result<Vec<PathBuf>, walkdir::Error> {
                 let glob = match path.to_str().map(Glob::new) {
                     Some(Ok(glob)) => glob.compile_matcher(),
-                    None | Some(Err(_)) => return Ok(vec![path]),
+                    None | Some(Err(_)) => {
+                        glob_output();
+                        verbose_println!("Could not glob-expand {}", path.display());
+                        return Ok(vec![path]);
+                    },
                 };
 
                 let entries: Vec<walkdir::DirEntry> = WalkDir::new(&dotfiles_path)
@@ -264,7 +271,7 @@ fn merge_dotrc(
                     .into_iter()
                     .collect::<Result<_, _>>()?;
 
-                let paths = entries
+                let expanded_paths: Vec<_> = entries
                     .into_iter()
                     .filter_map(|entry| {
                         let entry_path = entry.path().strip_prefix(&dotfiles_path).expect("Entry must be in the dotfiles path");
@@ -277,13 +284,28 @@ fn merge_dotrc(
                     })
                     .collect();
 
-                Ok(paths)
+                // If an entry just got expanded to itself, don't print anything about it
+                match &expanded_paths.as_slice() {
+                    [expanded_path] if expanded_path == &path => (),
+                    _ => {
+                        glob_output();
+                        verbose_println!("Glob-expanded {} to:", path.display());
+                        for expanded_path in &expanded_paths {
+                            verbose_println!("\t- {}", expanded_path.display())
+                        }
+                    },
+                }
+
+                Ok(expanded_paths)
             })
             // If any glob expansion failed due to an I/O error, give up
             .collect::<Result<Vec<Vec<PathBuf>>, _>>()?
             // Then flatten the glob-expanded results
             .into_iter()
             .flatten()
+            // Finally, make each exclude path absolute by prepending them with
+            // the dotfiles path
+            .map(|exclude| dotfiles_path.join(exclude))
             .collect();
 
         // Finally, remove any duplicate entries due to files matching multiple globs
@@ -301,7 +323,6 @@ fn merge_dotrc(
     let hostname = merge_hierarchy(partial_config.hostname, dotrc_config.hostname);
 
     Ok(Config {
-        verbose,
         excludes,
         tags,
         dotfiles_path,
@@ -323,7 +344,10 @@ fn find_dotrc(partial_config: &PartialConfig) -> Option<PathBuf> {
     let items = crate::resolver::get(&config).ok()?;
     for item in items {
         match item.dest().file_name() {
-            Some(name) if name == DOTRC_NAME => return Some(item.source().clone()),
+            Some(name) if name == DOTRC_NAME => {
+                verbose_println!("Discovered dotrc at {}", item.source().display());
+                return Some(item.source().clone());
+            },
             _ => (),
         }
     }
@@ -332,9 +356,18 @@ fn find_dotrc(partial_config: &PartialConfig) -> Option<PathBuf> {
 }
 
 pub fn get(cli_args: &clap::ArgMatches) -> Result<Config, Error> {
-    let partial_config = PartialConfig::merge(CliConfig::get(cli_args), DefaultConfig::get()?);
-    let dotrc_config = dotrc::get(find_dotrc(&partial_config))?;
+    // We want to avoid incorrect/duplicate verbose output from
+    // the partial config pass
+    let (partial_config, dotrc_config) = {
+        let _x = util::with_verbosity(false);
+
+        let partial_config = PartialConfig::merge(CliConfig::get(cli_args), DefaultConfig::get()?);
+        let dotrc_config = dotrc::get(find_dotrc(&partial_config))?;
+
+        (partial_config, dotrc_config)
+    };
     let config = merge_dotrc(partial_config, dotrc_config)?;
 
+    config.validate();
     Ok(config)
 }

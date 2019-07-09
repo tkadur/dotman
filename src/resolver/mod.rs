@@ -1,4 +1,4 @@
-use crate::{common::Item, config::Config};
+use crate::{common::Item, config::Config, verbose_println};
 use derive_more::From;
 use std::{
     collections::HashSet,
@@ -86,19 +86,26 @@ fn link_dir_contents(dir: &Path, excludes: &HashSet<&Path>) -> Result<Vec<Item>,
     let mut res = vec![];
     for entry in WalkDir::new(dir).into_iter().filter_entry(is_not_hidden) {
         let entry = entry?;
-        let entry_full_path = entry.path();
-        let path = match dir.parent() {
-            None => entry_full_path,
-            Some(parent) => entry_full_path
-                .strip_prefix(parent)
-                .expect("entry must be a prefix of dir"),
-        };
+
+        let path = entry.path();
+
+        if excludes.contains(path) {
+            verbose_println!("Excluded {}", path.display());
+        }
 
         if is_not_hidden(&entry) && entry.file_type().is_file() && !excludes.contains(path) {
-            let source = PathBuf::from(entry_full_path);
-            let dest = dirs::home_dir()
-                .ok_or(NoHomeDirectory)?
-                .join(make_hidden(path));
+            let source = PathBuf::from(path);
+            let dest = {
+                let dest_tail = match dir.parent() {
+                    None => path,
+                    Some(parent) => path
+                        .strip_prefix(parent)
+                        .expect("dir must be a prefix of entry"),
+                };
+                dirs::home_dir()
+                    .ok_or(NoHomeDirectory)?
+                    .join(make_hidden(dest_tail))
+            };
             res.push(Item::new(source, dest));
         }
     }
@@ -117,20 +124,18 @@ fn link_dir_contents(dir: &Path, excludes: &HashSet<&Path>) -> Result<Vec<Item>,
 ///
 /// Ensures: All paths in the output are absolute
 fn find_items(
-    path: PathBuf,
+    root: PathBuf,
     is_prefixed: &impl Fn(&Path) -> bool,
     active_prefixed_dirs: &HashSet<&Path>,
     excludes: &HashSet<&Path>,
     res: &mut Vec<Item>,
 ) -> Result<(), Error> {
-    debug_assert!(path.is_absolute());
+    debug_assert!(root.is_absolute());
 
-    for entry in path.read_dir()? {
+    for entry in root.read_dir()? {
         let entry = entry?;
-        let entry_path_raw = entry.path();
-        let entry_path = entry_path_raw
-            .strip_prefix(&path)
-            .expect("entry must be within root");
+        let path = entry.path();
+        debug_assert!(path.is_absolute());
 
         let entry_name = PathBuf::from(entry.file_name());
 
@@ -143,7 +148,11 @@ fn find_items(
                 .unwrap_or(false)
         }
 
-        if is_hidden(&entry_name) || excludes.contains(entry_path) {
+        let excluded = excludes.contains(path.as_path());
+        if is_hidden(&entry_name) || excluded {
+            if excluded {
+                verbose_println!("Excluded {}", path.display());
+            }
             continue;
         }
 
