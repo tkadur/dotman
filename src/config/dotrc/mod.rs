@@ -35,7 +35,7 @@ impl error::Error for Error {
     }
 }
 
-#[derive(Debug, Default, Deserialize)]
+#[derive(Debug, Default, Deserialize, PartialEq, Eq)]
 #[serde(deny_unknown_fields)]
 /// Configuration options available in dotrc
 pub struct Config {
@@ -82,4 +82,83 @@ where
     let config = serde_yaml::from_str(&contents)?;
 
     Ok(config)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::Config;
+    use pretty_assertions::assert_eq;
+    use std::io::Write;
+    use tempfile::NamedTempFile;
+
+    #[test]
+    fn empty_dotrc() {
+        let mut dotrc = NamedTempFile::new().unwrap();
+        write!(dotrc, "").unwrap();
+
+        let config = super::get(Some(dotrc.path())).unwrap();
+        let expected = Config::default();
+
+        assert_eq!(config, expected);
+    }
+
+    #[test]
+    fn excludes() {
+        let mut dotrc = NamedTempFile::new().unwrap();
+        let contents = r#"
+excludes:
+    - python
+    - secrets
+"#;
+        write!(dotrc, "{}", contents).unwrap();
+
+        let config = super::get(Some(dotrc.path())).unwrap();
+        let expected = Config {
+            excludes: Some(vec![String::from("python"), String::from("secrets")]),
+            ..Config::default()
+        };
+
+        assert_eq!(config, expected);
+    }
+
+    #[test]
+    fn tags() {
+        let mut dotrc = NamedTempFile::new().unwrap();
+        let contents = r#"
+tags:
+    - haskell
+    - rust
+    - vim
+"#;
+        write!(dotrc, "{}", contents).unwrap();
+
+        let config = super::get(Some(dotrc.path())).unwrap();
+        let expected = Config {
+            tags: Some(vec![
+                String::from("haskell"),
+                String::from("rust"),
+                String::from("vim"),
+            ]),
+            ..Config::default()
+        };
+
+        assert_eq!(config, expected);
+    }
+
+    #[test]
+    fn dotfiles_path() {
+        let mut dotrc = NamedTempFile::new().unwrap();
+        let contents = r#"
+dotfiles-path: ~/.top_secret
+"#;
+        write!(dotrc, "{}", contents).unwrap();
+
+        let config = super::get(Some(dotrc.path())).unwrap();
+        let expected = Config {
+            dotfiles_path: Some(String::from("~/.top_secret")),
+            ..Config::default()
+        };
+
+        assert_eq!(config, expected);
+    }
 }
