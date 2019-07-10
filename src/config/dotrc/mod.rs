@@ -5,12 +5,12 @@ use std::{
     fmt::{self, Display},
     fs,
     io::{self, Read},
-    path::PathBuf,
+    path::Path,
 };
 
 #[derive(Debug, From)]
 pub enum Error {
-    ParseError(toml::de::Error),
+    ParseError(serde_yaml::Error),
     IoError(io::Error),
 }
 use self::Error::*;
@@ -52,7 +52,10 @@ pub struct Config {
 /// and will return an empty config. Failure to read the dotrc
 /// file or a malformed dotrc, on the other hand, _is_ considered
 /// an error.
-pub fn get(dotrc_path: Option<PathBuf>) -> Result<Config, Error> {
+pub fn get<P>(dotrc_path: Option<P>) -> Result<Config, Error>
+where
+    P: AsRef<Path>,
+{
     let path = match dotrc_path {
         Some(path) => path,
         None => return Ok(Config::default()),
@@ -71,7 +74,12 @@ pub fn get(dotrc_path: Option<PathBuf>) -> Result<Config, Error> {
         contents
     };
 
-    let config = toml::from_str(&contents)?;
+    // serde_yaml errors on empty input, so handle that case manually
+    if contents.is_empty() {
+        return Ok(Config::default())
+    }
+
+    let config = serde_yaml::from_str(&contents)?;
 
     Ok(config)
 }

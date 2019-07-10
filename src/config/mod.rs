@@ -5,16 +5,24 @@ use derive_getters::Getters;
 use derive_more::From;
 use gethostname::gethostname;
 use globset::Glob;
+use lazy_static::lazy_static;
 use std::{
     collections::HashSet,
     error,
+    ffi::OsStr,
     fmt::{self, Display},
     path::PathBuf,
 };
 use walkdir::WalkDir;
 
 const DEFAULT_DOTFILES_DIR: &str = ".dotfiles";
-const DOTRC_NAME: &str = ".dotrc.toml";
+lazy_static! {
+    static ref DOTRC_NAMES: [&'static OsStr; 3] = [
+        OsStr::new(".dotrc"),
+        OsStr::new(".dotrc.yml"),
+        OsStr::new(".dotrc.yaml")
+    ];
+}
 
 #[derive(Debug, From)]
 pub enum Error {
@@ -341,10 +349,12 @@ fn merge_dotrc(
 fn find_dotrc(partial_config: &PartialConfig) -> Option<PathBuf> {
     let config = partial_config.to_config();
 
+    // Try to check if a dotrc was among the files discovered from partial_config
     let items = crate::resolver::get(&config).ok()?;
     for item in items {
         match item.dest().file_name() {
-            Some(name) if name == DOTRC_NAME => {
+            // Work around https://github.com/rust-lang/rust/issues/42671
+            Some(name) if DOTRC_NAMES.contains(&name) => {
                 verbose_println!("Discovered dotrc at {}", item.source().display());
                 return Some(item.source().clone());
             },
@@ -352,7 +362,16 @@ fn find_dotrc(partial_config: &PartialConfig) -> Option<PathBuf> {
         }
     }
 
-    dirs::home_dir().map(|home| home.join(DOTRC_NAME))
+    // Otherwise, try to find a dotrc in the home directory
+    let home_dir = dirs::home_dir()?;
+    for dotrc_name in DOTRC_NAMES.iter() {
+        let dotrc_path = home_dir.join(dotrc_name);
+        if dotrc_path.exists() {
+            return Some(dotrc_path);
+        }
+    }
+
+    None
 }
 
 pub fn get(cli_args: &clap::ArgMatches) -> Result<Config, Error> {
