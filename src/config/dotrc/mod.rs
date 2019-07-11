@@ -7,6 +7,7 @@ use std::{
     io::{self, Read},
     path::Path,
 };
+use crate::common::Invariant;
 
 #[derive(Debug, From)]
 pub enum Error {
@@ -46,6 +47,12 @@ pub struct Config {
     pub hostname: Option<String>,
 }
 
+impl Invariant for Config {
+    fn invariant(&self) -> bool {
+        true
+    }
+}
+
 /// Gets configuration options from the dotrc file.
 ///
 /// The dotrc file not existing is _not_ considered an error,
@@ -76,7 +83,7 @@ where
 
     // serde_yaml errors on empty input, so handle that case manually
     if contents.is_empty() {
-        return Ok(Config::default())
+        return Ok(Config::default());
     }
 
     let config = serde_yaml::from_str(&contents)?;

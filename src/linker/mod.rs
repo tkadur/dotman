@@ -1,3 +1,4 @@
+use contracts::*;
 use crate::{
     common::{util, FormattedItem, FormattedItems},
     verbose_println,
@@ -9,7 +10,9 @@ use std::{
     fs,
     io::{self, Write},
     path::PathBuf,
+    path::Path,
 };
+use crate::common::Invariant;
 
 #[derive(Debug, From)]
 pub enum Error {
@@ -47,22 +50,29 @@ struct Config {
 }
 
 #[cfg(unix)]
-fn link(item: &FormattedItem, config: &Config) -> Result<(), Error> {
-    verbose_println!("Linking {}", item);
-
-    if config.dry_run {
-        return Ok(());
-    }
-
-    let dest = item.dest();
-
-    fs::create_dir_all(dest.parent().unwrap_or(dest))?;
-    std::os::unix::fs::symlink(item.source(), item.dest())?;
-
-    Ok(())
+fn symlink(source: impl AsRef<Path>, dest: impl AsRef<Path>) -> io::Result<()> {
+    std::os::unix::fs::symlink(source, dest)
 }
 
+#[pre(item.invariant())]
 fn link_item(item: &FormattedItem, config: &Config) -> Result<(), Error> {
+    /// Performs tha actual linking after all validation 
+    /// is finished.
+    fn link(item: &FormattedItem, config: &Config) -> Result<(), Error> {
+        verbose_println!("Linking {}", item);
+
+        if config.dry_run {
+            return Ok(());
+        }
+
+        let dest = item.dest();
+
+        fs::create_dir_all(dest.parent().unwrap_or(dest))?;
+        symlink(item.source(), item.dest())?;
+
+        Ok(())
+    }
+
     let (source, dest) = (item.source(), item.dest());
 
     if dest.exists() {
@@ -95,9 +105,10 @@ fn link_item(item: &FormattedItem, config: &Config) -> Result<(), Error> {
     Ok(())
 }
 
+#[pre(items.invariant())]
 pub fn link_items(items: FormattedItems, args: &clap::ArgMatches) -> Result<(), Error> {
     let dry_run = args.is_present("dry_run");
-    let config = Config{ dry_run};
+    let config = Config { dry_run };
 
     for item in &items {
         link_item(item, &config)?;

@@ -1,6 +1,10 @@
 mod dotrc;
 
-use crate::{common::util, verbose_println};
+use crate::{
+    common::{util, Invariant},
+    verbose_println,
+};
+use contracts::*;
 use derive_getters::Getters;
 use derive_more::From;
 use gethostname::gethostname;
@@ -24,40 +28,6 @@ lazy_static! {
     ];
 }
 
-#[derive(Debug, From)]
-pub enum Error {
-    NoSystemHostname,
-    NoHomeDirectory,
-    WalkdirError(walkdir::Error),
-    DotrcError(dotrc::Error),
-}
-use self::Error::*;
-
-impl Display for Error {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        let error_msg = match self {
-            NoSystemHostname => String::from("error reading system hostname"),
-            NoHomeDirectory => String::from("error finding home directory"),
-            WalkdirError(error) => {
-                format!("error reading file or directory ({})", error.to_string())
-            },
-            DotrcError(error) => error.to_string(),
-        };
-
-        write!(f, "{}", error_msg)
-    }
-}
-
-impl error::Error for Error {
-    fn source(&self) -> Option<&(dyn error::Error + 'static)> {
-        match self {
-            WalkdirError(error) => Some(error),
-            DotrcError(error) => Some(error),
-            NoSystemHostname | NoHomeDirectory => None,
-        }
-    }
-}
-
 /// All dotman configuration options
 #[derive(Debug, Getters)]
 pub struct Config {
@@ -67,13 +37,10 @@ pub struct Config {
     hostname: String,
 }
 
-impl Config {
-    // Checks that all of `Config`'s invariants hold
-    fn validate(&self) {
-        for exclude in &self.excludes {
-            debug_assert!(exclude.is_absolute());
-        }
-        debug_assert!(self.dotfiles_path.is_absolute());
+impl Invariant for Config {
+    fn invariant(&self) -> bool {
+        self.dotfiles_path.is_absolute()
+            && self.excludes.iter().all(|exclude| exclude.is_absolute())
     }
 }
 
@@ -94,7 +61,16 @@ struct PartialConfig {
     hostname: (String, PartialSource),
 }
 
+impl Invariant for PartialConfig {
+    fn invariant(&self) -> bool {
+        self.excludes.iter().all(|exclude| exclude.is_absolute())
+    }
+}
+
+#[invariant(self.invariant())]
 impl PartialConfig {
+    #[pre(cli.invariant() && default.invariant())]
+    #[post(ret.invariant())]
     fn merge(cli: CliConfig, default: DefaultConfig) -> Self {
         /// Combines a single CLI item and a single default item, annotating the
         /// result with its source
@@ -120,6 +96,7 @@ impl PartialConfig {
         }
     }
 
+    #[post(ret.invariant())]
     fn to_config(&self) -> Config {
         let excludes = self.excludes.clone();
         let tags = self.tags.clone();
@@ -145,8 +122,28 @@ struct CliConfig {
     hostname: Option<String>,
 }
 
+impl Invariant for CliConfig {
+    fn invariant(&self) -> bool {
+        if let Some(dotfiles_path) = &self.dotfiles_path {
+            if !dotfiles_path.is_absolute() {
+                return false;
+            }
+        }
+
+        if let Some(excludes) = &self.excludes {
+            if !excludes.iter().all(|exclude| exclude.is_absolute()) {
+                return false;
+            }
+        }
+
+        true
+    }
+}
+
+#[invariant(self.invariant())]
 impl CliConfig {
     /// Gets a partial configuration from CLI arguments.
+    #[post(ret.invariant())]
     fn get(args: &clap::ArgMatches) -> Self {
         let excludes = args
             .values_of("excludes")
@@ -171,9 +168,17 @@ struct DefaultConfig {
     config: Config,
 }
 
+impl Invariant for DefaultConfig {
+    fn invariant(&self) -> bool {
+        self.config.invariant()
+    }
+}
+
+#[invariant(self.invariant())]
 impl DefaultConfig {
     /// Gets a partial configuration corresponding to the "default"
     /// values/sources of each configuration option.
+    #[post(util::check_result(&ret, DefaultConfig::invariant))]
     fn get() -> Result<DefaultConfig, Error> {
         let excludes = vec![];
         let tags = vec![];
@@ -197,6 +202,9 @@ impl DefaultConfig {
 
 /// Merges a partial config (obtained from the CLI and default settings) with a
 /// config obtained from reading the dotrc to create a complete configuration.
+#[pre(partial_config.invariant())]
+#[pre(dotrc_config.invariant())]
+#[post(util::check_result(&ret, Config::invariant))]
 fn merge_dotrc(
     partial_config: PartialConfig,
     dotrc_config: dotrc::Config,
@@ -346,6 +354,8 @@ fn merge_dotrc(
 /// - Any `tag-` folders matching the tags in `partial_config` (the tags are
 ///   searched in an unspecified order)
 /// - The default location (`~/.dotrc`)
+#[pre(partial_config.invariant())]
+#[post(util::check_option(&ret, |dotrc| dotrc.is_absolute()))]
 fn find_dotrc(partial_config: &PartialConfig) -> Option<PathBuf> {
     let config = partial_config.to_config();
 
@@ -353,7 +363,6 @@ fn find_dotrc(partial_config: &PartialConfig) -> Option<PathBuf> {
     let items = crate::resolver::get(&config).ok()?;
     for item in items {
         match item.dest().file_name() {
-            // Work around https://github.com/rust-lang/rust/issues/42671
             Some(name) if DOTRC_NAMES.contains(&name) => {
                 verbose_println!("Discovered dotrc at {}", item.source().display());
                 return Some(item.source().clone());
@@ -374,6 +383,7 @@ fn find_dotrc(partial_config: &PartialConfig) -> Option<PathBuf> {
     None
 }
 
+#[post(util::check_result(&ret, Config::invariant))]
 pub fn get(cli_args: &clap::ArgMatches) -> Result<Config, Error> {
     // We want to avoid incorrect/duplicate verbose output from
     // the partial config pass
@@ -387,6 +397,39 @@ pub fn get(cli_args: &clap::ArgMatches) -> Result<Config, Error> {
     };
     let config = merge_dotrc(partial_config, dotrc_config)?;
 
-    config.validate();
     Ok(config)
+}
+
+#[derive(Debug, From)]
+pub enum Error {
+    NoSystemHostname,
+    NoHomeDirectory,
+    WalkdirError(walkdir::Error),
+    DotrcError(dotrc::Error),
+}
+use self::Error::*;
+
+impl Display for Error {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        let error_msg = match self {
+            NoSystemHostname => String::from("error reading system hostname"),
+            NoHomeDirectory => String::from("error finding home directory"),
+            WalkdirError(error) => {
+                format!("error reading file or directory ({})", error.to_string())
+            },
+            DotrcError(error) => error.to_string(),
+        };
+
+        write!(f, "{}", error_msg)
+    }
+}
+
+impl error::Error for Error {
+    fn source(&self) -> Option<&(dyn error::Error + 'static)> {
+        match self {
+            WalkdirError(error) => Some(error),
+            DotrcError(error) => Some(error),
+            NoSystemHostname | NoHomeDirectory => None,
+        }
+    }
 }

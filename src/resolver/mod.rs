@@ -1,4 +1,7 @@
 use crate::{common::Item, config::Config, verbose_println};
+use crate::common::util;
+use crate::common::Invariant;
+use contracts::*;
 use derive_more::From;
 use std::{
     collections::HashSet,
@@ -10,57 +13,14 @@ use std::{
 };
 use walkdir::WalkDir;
 
-#[derive(Debug, From)]
-pub enum Error {
-    NoHomeDirectory,
-    /// Indicates when there are multiple active sources pointing to the same
-    /// destination.
-    DuplicateFiles {
-        dest: PathBuf,
-    },
-    IoError(io::Error),
-    WalkdirError(walkdir::Error),
-}
-use self::Error::*;
-
-impl Display for Error {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        let error_msg = match self {
-            NoHomeDirectory => String::from("can't find home directory"),
-            DuplicateFiles { dest } => {
-                format!("multiple source files for destination {}", dest.display())
-            },
-            IoError(error) => format!(
-                "error eading from dotfiles directory ({})",
-                error.to_string()
-            ),
-            WalkdirError(error) => format!(
-                "error reading from dotfiles directory ({})",
-                error.to_string()
-            ),
-        };
-
-        write!(f, "{}", error_msg)
-    }
-}
-
-impl error::Error for Error {
-    fn source(&self) -> Option<&(dyn error::Error + 'static)> {
-        match self {
-            NoHomeDirectory | DuplicateFiles { .. } => None,
-            IoError(error) => Some(error),
-            WalkdirError(error) => Some(error),
-        }
-    }
-}
-
 /// Returns every non-hidden non-excluded file in `dir` (recursively, ignoring
 /// directories).
 ///
-/// Requires: `dir` is absolute
+/// Requires: `dir` is absolute,  all paths in `excludes` are absolute
+#[pre(dir.is_absolute())]
+#[pre(excludes.iter().all(|exclude| exclude.is_absolute()))]
+#[post(util::check_result(&ret, |items| items.iter().all(Item::invariant)))]
 fn link_dir_contents(dir: &Path, excludes: &HashSet<&Path>) -> Result<Vec<Item>, Error> {
-    debug_assert!(dir.is_absolute());
-
     /// Checks if a entry's filename is not prefixed by a '.' character.
     /// If the path cannot be read as a String, assume it isn't hidden.
     fn is_not_hidden(entry: &walkdir::DirEntry) -> bool {
@@ -110,10 +70,6 @@ fn link_dir_contents(dir: &Path, excludes: &HashSet<&Path>) -> Result<Vec<Item>,
         }
     }
 
-    for item in &res {
-        debug_assert!(item.source().is_absolute());
-        debug_assert!(item.dest().is_absolute());
-    }
     Ok(res)
 }
 
@@ -123,6 +79,9 @@ fn link_dir_contents(dir: &Path, excludes: &HashSet<&Path>) -> Result<Vec<Item>,
 /// Requires: `path` is absolute
 ///
 /// Ensures: All paths in the output are absolute
+#[pre(root.is_absolute())]
+#[pre(excludes.iter().all(|exclude| exclude.is_absolute()))]
+#[post(res.iter().all(Item::invariant))]
 fn find_items(
     root: PathBuf,
     is_prefixed: &impl Fn(&Path) -> bool,
@@ -130,7 +89,6 @@ fn find_items(
     excludes: &HashSet<&Path>,
     res: &mut Vec<Item>,
 ) -> Result<(), Error> {
-    debug_assert!(root.is_absolute());
 
     for entry in root.read_dir()? {
         let entry = entry?;
@@ -172,13 +130,11 @@ fn find_items(
         }
     }
 
-    for item in res {
-        debug_assert!(item.source().is_absolute());
-        debug_assert!(item.dest().is_absolute());
-    }
     Ok(())
 }
 
+#[pre(config.invariant())]
+#[post(util::check_result(&ret, |items| items.iter().all(Item::invariant)))]
 pub fn get(config: &Config) -> Result<Vec<Item>, Error> {
     let hostname_prefix = "host-";
     let tag_prefix = "tag-";
@@ -232,4 +188,48 @@ pub fn get(config: &Config) -> Result<Vec<Item>, Error> {
     }
 
     Ok(res)
+}
+
+#[derive(Debug, From)]
+pub enum Error {
+    NoHomeDirectory,
+    /// Indicates when there are multiple active sources pointing to the same
+    /// destination.
+    DuplicateFiles {
+        dest: PathBuf,
+    },
+    IoError(io::Error),
+    WalkdirError(walkdir::Error),
+}
+use self::Error::*;
+
+impl Display for Error {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        let error_msg = match self {
+            NoHomeDirectory => String::from("can't find home directory"),
+            DuplicateFiles { dest } => {
+                format!("multiple source files for destination {}", dest.display())
+            },
+            IoError(error) => format!(
+                "error reading from dotfiles directory ({})",
+                error.to_string()
+            ),
+            WalkdirError(error) => format!(
+                "error reading from dotfiles directory ({})",
+                error.to_string()
+            ),
+        };
+
+        write!(f, "{}", error_msg)
+    }
+}
+
+impl error::Error for Error {
+    fn source(&self) -> Option<&(dyn error::Error + 'static)> {
+        match self {
+            NoHomeDirectory | DuplicateFiles { .. } => None,
+            IoError(error) => Some(error),
+            WalkdirError(error) => Some(error),
+        }
+    }
 }

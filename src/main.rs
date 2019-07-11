@@ -1,4 +1,4 @@
-#![warn(clippy::all)]
+// #![warn(clippy::all)]
 
 #[macro_use]
 mod common;
@@ -18,7 +18,7 @@ use self::Subcommand::*;
 impl<'a> Subcommand<'a> {
     fn from_args(args: &'a clap::ArgMatches<'a>) -> Subcommand<'a> {
         match args.subcommand() {
-            ("link", Some(sub_args)) => Link{sub_args},
+            ("link", Some(sub_args)) => Link { sub_args },
             ("ls", Some(_)) => Ls,
             _ => unreachable!(),
         }
