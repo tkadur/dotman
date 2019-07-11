@@ -1,3 +1,4 @@
+use crate::common::Invariant;
 use derive_more::From;
 use serde::Deserialize;
 use std::{
@@ -7,7 +8,6 @@ use std::{
     io::{self, Read},
     path::Path,
 };
-use crate::common::Invariant;
 
 #[derive(Debug, From)]
 pub enum Error {

@@ -1,18 +1,16 @@
-use contracts::*;
 use crate::{
-    common::{util, FormattedItem, FormattedItems},
+    common::{util, FormattedItem, FormattedItems, Invariant},
     verbose_println,
 };
+use contracts::*;
 use derive_more::From;
 use std::{
     error,
     fmt::{self, Display},
     fs,
     io::{self, Write},
-    path::PathBuf,
-    path::Path,
+    path::{Path, PathBuf},
 };
-use crate::common::Invariant;
 
 #[derive(Debug, From)]
 pub enum Error {
@@ -56,7 +54,7 @@ fn symlink(source: impl AsRef<Path>, dest: impl AsRef<Path>) -> io::Result<()> {
 
 #[pre(item.invariant())]
 fn link_item(item: &FormattedItem, config: &Config) -> Result<(), Error> {
-    /// Performs tha actual linking after all validation 
+    /// Performs tha actual linking after all validation
     /// is finished.
     fn link(item: &FormattedItem, config: &Config) -> Result<(), Error> {
         verbose_println!("Linking {}", item);

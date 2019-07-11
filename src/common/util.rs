@@ -16,14 +16,14 @@ pub fn append_vecs<T>(x: Vec<T>, mut y: Vec<T>) -> Vec<T> {
 pub fn check_option<T>(x: &Option<T>, f: impl FnOnce(&T) -> bool) -> bool {
     match x {
         Some(y) => f(y),
-        None => true
+        None => true,
     }
 }
 
 pub fn check_result<T, E>(x: &Result<T, E>, f: impl FnOnce(&T) -> bool) -> bool {
     match x {
         Ok(y) => f(y),
-        Err(_) => true
+        Err(_) => true,
     }
 }
 

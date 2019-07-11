@@ -1,6 +1,8 @@
-use crate::{common::Item, config::Config, verbose_println};
-use crate::common::util;
-use crate::common::Invariant;
+use crate::{
+    common::{util, Invariant, Item},
+    config::Config,
+    verbose_println,
+};
 use contracts::*;
 use derive_more::From;
 use std::{
@@ -89,7 +91,6 @@ fn find_items(
     excludes: &HashSet<&Path>,
     res: &mut Vec<Item>,
 ) -> Result<(), Error> {
-
     for entry in root.read_dir()? {
         let entry = entry?;
         let path = entry.path();
