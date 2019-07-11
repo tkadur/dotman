@@ -30,11 +30,14 @@ args:
     - verbose:
         short: v
         long: verbose
-        help: Enables verbose output. Can be specified multiple times for increased verbosity.
-        multiple: true
+        help: Enables verbose output.
 
 subcommands:
     - link:
         about: Links dotfiles
+        args:
+            - dry_run:
+                long: dry-run
+                help: Shows exactly what link would do, but without creating or linking any files
     - ls:
-        about: Shows dotfiles which will be linked.
+        about: Shows all active dotfiles

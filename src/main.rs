@@ -9,17 +9,17 @@ mod resolver;
 use common::{util, FormattedItems};
 use std::error;
 
-enum Subcommand {
-    Link,
+enum Subcommand<'a> {
+    Link { sub_args: &'a clap::ArgMatches<'a> },
     Ls,
 }
 use self::Subcommand::*;
 
-impl Subcommand {
-    fn from_args(args: &clap::ArgMatches) -> Subcommand {
+impl<'a> Subcommand<'a> {
+    fn from_args(args: &'a clap::ArgMatches<'a>) -> Subcommand<'a> {
         match args.subcommand() {
-            ("link", _) => Link,
-            ("ls", _) => Ls,
+            ("link", Some(sub_args)) => Link{sub_args},
+            ("ls", Some(_)) => Ls,
             _ => unreachable!(),
         }
     }
@@ -36,7 +36,7 @@ fn go() -> Result<(), Box<dyn error::Error>> {
     verbose_println!("");
 
     match Subcommand::from_args(&args) {
-        Link => linker::link_items(items)?,
+        Link { sub_args } => linker::link_items(items, sub_args)?,
         Ls => println!("{}", items),
     }
 

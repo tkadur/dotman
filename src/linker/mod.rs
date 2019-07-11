@@ -41,9 +41,19 @@ impl error::Error for Error {
     }
 }
 
+#[derive(Debug)]
+struct Config {
+    dry_run: bool,
+}
+
 #[cfg(unix)]
-fn link(item: &FormattedItem) -> Result<(), Error> {
+fn link(item: &FormattedItem, config: &Config) -> Result<(), Error> {
     verbose_println!("Linking {}", item);
+
+    if config.dry_run {
+        return Ok(());
+    }
+
     let dest = item.dest();
 
     fs::create_dir_all(dest.parent().unwrap_or(dest))?;
@@ -52,7 +62,7 @@ fn link(item: &FormattedItem) -> Result<(), Error> {
     Ok(())
 }
 
-fn link_item(item: &FormattedItem) -> Result<(), Error> {
+fn link_item(item: &FormattedItem, config: &Config) -> Result<(), Error> {
     let (source, dest) = (item.source(), item.dest());
 
     if dest.exists() {
@@ -74,20 +84,23 @@ fn link_item(item: &FormattedItem) -> Result<(), Error> {
                         util::FileType::Directory => return Err(DirectoryOverwrite(dest.clone())),
                         util::FileType::File | util::FileType::Symlink => fs::remove_file(dest)?,
                     };
-                    link(item)?;
+                    link(item, config)?;
                 }
             },
         }
     } else {
-        link(item)?
+        link(item, config)?
     }
 
     Ok(())
 }
 
-pub fn link_items(items: FormattedItems) -> Result<(), Error> {
+pub fn link_items(items: FormattedItems, args: &clap::ArgMatches) -> Result<(), Error> {
+    let dry_run = args.is_present("dry_run");
+    let config = Config{ dry_run};
+
     for item in &items {
-        link_item(item)?;
+        link_item(item, &config)?;
     }
 
     Ok(())
