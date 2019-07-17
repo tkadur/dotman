@@ -1,10 +1,7 @@
+pub mod cli;
 mod dotrc;
 
-use crate::{
-    common::{util, Invariant},
-    verbose_println,
-};
-use contracts::*;
+use crate::{common::util, verbose_println};
 use derive_getters::Getters;
 use derive_more::From;
 use gethostname::gethostname;
@@ -35,13 +32,7 @@ pub struct Config {
     tags: Vec<String>,
     dotfiles_path: PathBuf,
     hostname: String,
-}
-
-impl Invariant for Config {
-    fn invariant(&self) -> bool {
-        self.dotfiles_path.is_absolute()
-            && self.excludes.iter().all(|exclude| exclude.is_absolute())
-    }
+    command: cli::Command,
 }
 
 #[derive(Debug, Clone)]
@@ -59,126 +50,63 @@ struct PartialConfig {
     tags: Vec<String>,
     dotfiles_path: (PathBuf, PartialSource),
     hostname: (String, PartialSource),
+    command: cli::Command,
 }
 
-impl Invariant for PartialConfig {
-    fn invariant(&self) -> bool {
-        self.excludes.iter().all(|exclude| exclude.is_absolute())
-    }
-}
-
-#[invariant(self.invariant())]
 impl PartialConfig {
-    #[pre(cli.invariant() && default.invariant())]
-    #[post(ret.invariant())]
-    fn merge(cli: CliConfig, default: DefaultConfig) -> Self {
-        /// Combines a single CLI item and a single default item, annotating the
-        /// result with its source
-        fn merge_with_source<T>(cli: Option<T>, default: T) -> (T, PartialSource) {
-            cli.map(|c| (c, PartialSource::Cli))
-                .unwrap_or((default, PartialSource::Default))
-        }
+    fn merge(cli: cli::Config, default: DefaultConfig) -> Self {
+        let excludes = util::append_vecs(cli.excludes, default.excludes);
 
-        let excludes = util::append_vecs(
-            cli.excludes.unwrap_or_else(|| vec![]),
-            default.config.excludes,
-        );
-        let tags = util::append_vecs(cli.tags.unwrap_or_else(|| vec![]), default.config.tags);
+        let tags = util::append_vecs(cli.tags, default.tags);
 
-        let dotfiles_path = merge_with_source(cli.dotfiles_path, default.config.dotfiles_path);
-        let hostname = merge_with_source(cli.hostname, default.config.hostname);
+        let dotfiles_path = match cli.dotfiles_path {
+            Some(dotfiles_path) => (dotfiles_path, PartialSource::Cli),
+            None => (default.dotfiles_path, PartialSource::Default),
+        };
+
+        let hostname = match cli.hostname {
+            Some(hostname) => (hostname, PartialSource::Cli),
+            None => (default.hostname, PartialSource::Default),
+        };
+
+        let command = cli.command;
 
         PartialConfig {
             excludes,
             tags,
             dotfiles_path,
             hostname,
+            command,
         }
     }
 
-    #[post(ret.invariant())]
     fn to_config(&self) -> Config {
         let excludes = self.excludes.clone();
         let tags = self.tags.clone();
         let (dotfiles_path, _) = self.dotfiles_path.clone();
         let (hostname, _) = self.hostname.clone();
+        let command = self.command.clone();
 
         Config {
             excludes,
             tags,
             dotfiles_path,
             hostname,
-        }
-    }
-}
-
-/// The portion of the configuration read from CLI arguments and
-/// environment variables
-#[derive(Debug)]
-struct CliConfig {
-    excludes: Option<Vec<PathBuf>>,
-    tags: Option<Vec<String>>,
-    dotfiles_path: Option<PathBuf>,
-    hostname: Option<String>,
-}
-
-impl Invariant for CliConfig {
-    fn invariant(&self) -> bool {
-        if let Some(dotfiles_path) = &self.dotfiles_path {
-            if !dotfiles_path.is_absolute() {
-                return false;
-            }
-        }
-
-        if let Some(excludes) = &self.excludes {
-            if !excludes.iter().all(|exclude| exclude.is_absolute()) {
-                return false;
-            }
-        }
-
-        true
-    }
-}
-
-#[invariant(self.invariant())]
-impl CliConfig {
-    /// Gets a partial configuration from CLI arguments.
-    #[post(ret.invariant())]
-    fn get(args: &clap::ArgMatches) -> Self {
-        let excludes = args
-            .values_of("excludes")
-            .map(|e| e.map(PathBuf::from).collect());
-        let tags = args
-            .values_of("tags")
-            .map(|t| t.map(String::from).collect());
-
-        let dotfiles_path = args.value_of("dotfiles_path").map(PathBuf::from);
-        let hostname = args.value_of("hostname").map(String::from);
-
-        CliConfig {
-            excludes,
-            tags,
-            dotfiles_path,
-            hostname,
+            command,
         }
     }
 }
 
 struct DefaultConfig {
-    config: Config,
+    excludes: Vec<PathBuf>,
+    tags: Vec<String>,
+    dotfiles_path: PathBuf,
+    hostname: String,
 }
 
-impl Invariant for DefaultConfig {
-    fn invariant(&self) -> bool {
-        self.config.invariant()
-    }
-}
-
-#[invariant(self.invariant())]
 impl DefaultConfig {
     /// Gets a partial configuration corresponding to the "default"
     /// values/sources of each configuration option.
-    #[post(util::check_result(&ret, DefaultConfig::invariant))]
     fn get() -> Result<DefaultConfig, Error> {
         let excludes = vec![];
         let tags = vec![];
@@ -190,21 +118,16 @@ impl DefaultConfig {
         let hostname = gethostname().to_str().ok_or(NoSystemHostname)?.to_owned();
 
         Ok(DefaultConfig {
-            config: Config {
-                excludes,
-                tags,
-                dotfiles_path,
-                hostname,
-            },
+            excludes,
+            tags,
+            dotfiles_path,
+            hostname,
         })
     }
 }
 
 /// Merges a partial config (obtained from the CLI and default settings) with a
 /// config obtained from reading the dotrc to create a complete configuration.
-#[pre(partial_config.invariant())]
-#[pre(dotrc_config.invariant())]
-#[post(util::check_result(&ret, Config::invariant))]
 fn merge_dotrc(
     partial_config: PartialConfig,
     dotrc_config: dotrc::Config,
@@ -338,11 +261,14 @@ fn merge_dotrc(
 
     let hostname = merge_hierarchy(partial_config.hostname, dotrc_config.hostname);
 
+    let command = partial_config.command;
+
     Ok(Config {
         excludes,
         tags,
         dotfiles_path,
         hostname,
+        command,
     })
 }
 
@@ -354,8 +280,6 @@ fn merge_dotrc(
 /// - Any `tag-` folders matching the tags in `partial_config` (the tags are
 ///   searched in an unspecified order)
 /// - The default location (`~/.dotrc`)
-#[pre(partial_config.invariant())]
-#[post(util::check_option(&ret, |dotrc| dotrc.is_absolute()))]
 fn find_dotrc(partial_config: &PartialConfig) -> Option<PathBuf> {
     let config = partial_config.to_config();
 
@@ -383,19 +307,26 @@ fn find_dotrc(partial_config: &PartialConfig) -> Option<PathBuf> {
     None
 }
 
-#[post(util::check_result(&ret, Config::invariant))]
-pub fn get(cli_args: &clap::ArgMatches) -> Result<Config, Error> {
+pub fn get() -> Result<Config, Error> {
+    let cli_config = cli::Config::get();
+
     // We want to avoid incorrect/duplicate verbose output from
     // the partial config pass
     let (partial_config, dotrc_config) = {
         let _x = util::with_verbosity(false);
 
-        let partial_config = PartialConfig::merge(CliConfig::get(cli_args), DefaultConfig::get()?);
+        let partial_config = PartialConfig::merge(cli_config, DefaultConfig::get()?);
         let dotrc_config = dotrc::get(find_dotrc(&partial_config))?;
 
         (partial_config, dotrc_config)
     };
     let config = merge_dotrc(partial_config, dotrc_config)?;
+
+    // Check invariants
+    for exclude in config.excludes() {
+        debug_assert!(exclude.is_absolute())
+    }
+    debug_assert!(config.dotfiles_path().is_absolute());
 
     Ok(config)
 }

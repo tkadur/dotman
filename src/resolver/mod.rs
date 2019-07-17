@@ -1,9 +1,5 @@
-use crate::{
-    common::{util, Invariant, Item},
-    config::Config,
-    verbose_println,
-};
-use contracts::*;
+use crate::{common::Item, config::Config, verbose_println};
+// use contracts::*;
 use derive_more::From;
 use std::{
     collections::HashSet,
@@ -17,12 +13,12 @@ use walkdir::WalkDir;
 
 /// Returns every non-hidden non-excluded file in `dir` (recursively, ignoring
 /// directories).
-///
-/// Requires: `dir` is absolute,  all paths in `excludes` are absolute
-#[pre(dir.is_absolute())]
-#[pre(excludes.iter().all(|exclude| exclude.is_absolute()))]
-#[post(util::check_result(&ret, |items| items.iter().all(Item::invariant)))]
 fn link_dir_contents(dir: &Path, excludes: &HashSet<&Path>) -> Result<Vec<Item>, Error> {
+    debug_assert!(dir.is_absolute());
+    for exclude in excludes {
+        debug_assert!(exclude.is_absolute());
+    }
+
     /// Checks if a entry's filename is not prefixed by a '.' character.
     /// If the path cannot be read as a String, assume it isn't hidden.
     fn is_not_hidden(entry: &walkdir::DirEntry) -> bool {
@@ -77,13 +73,6 @@ fn link_dir_contents(dir: &Path, excludes: &HashSet<&Path>) -> Result<Vec<Item>,
 
 /// Finds the items under `path` which are to be symlinked, according to all the
 /// options specified, and place then in `res`
-///
-/// Requires: `path` is absolute
-///
-/// Ensures: All paths in the output are absolute
-#[pre(root.is_absolute())]
-#[pre(excludes.iter().all(|exclude| exclude.is_absolute()))]
-#[post(res.iter().all(Item::invariant))]
 fn find_items(
     root: PathBuf,
     is_prefixed: &impl Fn(&Path) -> bool,
@@ -91,6 +80,11 @@ fn find_items(
     excludes: &HashSet<&Path>,
     res: &mut Vec<Item>,
 ) -> Result<(), Error> {
+    debug_assert!(root.is_absolute());
+    for exclude in excludes {
+        debug_assert!(exclude.is_absolute());
+    }
+
     for entry in root.read_dir()? {
         let entry = entry?;
         let path = entry.path();
@@ -134,14 +128,12 @@ fn find_items(
     Ok(())
 }
 
-#[pre(config.invariant())]
-#[post(util::check_result(&ret, |items| items.iter().all(Item::invariant)))]
 pub fn get(config: &Config) -> Result<Vec<Item>, Error> {
     let hostname_prefix = "host-";
     let tag_prefix = "tag-";
     let prefixes = [hostname_prefix, tag_prefix];
 
-    // Checks if a path is prefixed by any element of prefixes
+    // Checks if a path is prefixed by any element of `prefixes`
     // If the path cannot be read as a String, assume it isn't.
     let is_prefixed = |filename: &Path| -> bool {
         for prefix in &prefixes {
@@ -165,7 +157,7 @@ pub fn get(config: &Config) -> Result<Vec<Item>, Error> {
         .map(|p| p.as_path())
         .collect();
 
-    let excludes = config.excludes().iter().map(|e| e.as_path()).collect();
+    let excludes = config.excludes().iter().map(PathBuf::as_path).collect();
 
     let mut res = vec![];
 

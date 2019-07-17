@@ -1,4 +1,3 @@
-use crate::common::Invariant;
 use derive_more::From;
 use serde::Deserialize;
 use std::{
@@ -9,33 +8,6 @@ use std::{
     path::Path,
 };
 
-#[derive(Debug, From)]
-pub enum Error {
-    ParseError(serde_yaml::Error),
-    IoError(io::Error),
-}
-use self::Error::*;
-
-impl Display for Error {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        let error_msg = match self {
-            ParseError(error) => format!("error parsing .dotrc ({})", error),
-            IoError(error) => format!("error reading .dotrc ({})", error),
-        };
-
-        write!(f, "{}", error_msg)
-    }
-}
-
-impl error::Error for Error {
-    fn source(&self) -> Option<&(dyn error::Error + 'static)> {
-        match self {
-            ParseError(error) => Some(error),
-            IoError(error) => Some(error),
-        }
-    }
-}
-
 #[derive(Debug, Default, Deserialize, PartialEq, Eq)]
 #[serde(deny_unknown_fields)]
 /// Configuration options available in dotrc
@@ -45,12 +17,6 @@ pub struct Config {
     #[serde(rename = "dotfiles-path")]
     pub dotfiles_path: Option<String>,
     pub hostname: Option<String>,
-}
-
-impl Invariant for Config {
-    fn invariant(&self) -> bool {
-        true
-    }
 }
 
 /// Gets configuration options from the dotrc file.
@@ -89,6 +55,33 @@ where
     let config = serde_yaml::from_str(&contents)?;
 
     Ok(config)
+}
+
+#[derive(Debug, From)]
+pub enum Error {
+    ParseError(serde_yaml::Error),
+    IoError(io::Error),
+}
+use self::Error::*;
+
+impl Display for Error {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        let error_msg = match self {
+            ParseError(error) => format!("error parsing .dotrc ({})", error),
+            IoError(error) => format!("error reading .dotrc ({})", error),
+        };
+
+        write!(f, "{}", error_msg)
+    }
+}
+
+impl error::Error for Error {
+    fn source(&self) -> Option<&(dyn error::Error + 'static)> {
+        match self {
+            ParseError(error) => Some(error),
+            IoError(error) => Some(error),
+        }
+    }
 }
 
 #[cfg(test)]

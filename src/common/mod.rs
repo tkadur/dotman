@@ -1,6 +1,5 @@
 pub mod util;
 
-use contracts::*;
 use derive_getters::Getters;
 use std::{
     fmt::{self, Display},
@@ -8,30 +7,16 @@ use std::{
     path::PathBuf,
 };
 
-/// Represents any invariants that must hold.
-///
-/// `invariant()` returns whether those invariants are true.
-pub trait Invariant {
-    fn invariant(&self) -> bool;
-}
-
 #[derive(Debug, Getters)]
 pub struct Item {
     source: PathBuf,
     dest: PathBuf,
 }
 
-impl Invariant for Item {
-    fn invariant(&self) -> bool {
-        self.source.is_absolute() && self.dest.is_absolute()
-    }
-}
-
-#[invariant(self.invariant())]
 impl Item {
-    #[pre(source.is_absolute() && dest.is_absolute())]
-    #[post(ret.invariant())]
     pub fn new(source: PathBuf, dest: PathBuf) -> Self {
+        debug_assert!(source.is_absolute());
+        debug_assert!(dest.is_absolute());
         Item { source, dest }
     }
 
@@ -44,7 +29,6 @@ impl Item {
     }
 }
 
-#[invariant(self.invariant())]
 impl Display for Item {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "{} -> {}", self.display_source(), self.display_dest())
@@ -54,27 +38,19 @@ impl Display for Item {
 /// Just a wrapper for pretty-formatting Item by aligning the
 /// arrows in the `Display` impl.
 ///
-/// The intent is to simultaneously build all the `FormattedItem`s so
-/// they all be aligned with each other.
+/// This type is not meant to be constructed directly. Instead,
+/// use `FormattedItems`.
 pub struct FormattedItem {
     item: Item,
     width: usize,
 }
 
-#[invariant(self.invariant())]
 impl FormattedItem {
     pub fn item(&self) -> &Item {
         &self.item
     }
 }
 
-impl Invariant for FormattedItem {
-    fn invariant(&self) -> bool {
-        self.item.invariant()
-    }
-}
-
-#[invariant(self.invariant())]
 impl std::ops::Deref for FormattedItem {
     type Target = Item;
 
@@ -83,7 +59,6 @@ impl std::ops::Deref for FormattedItem {
     }
 }
 
-#[invariant(self.invariant())]
 impl Display for FormattedItem {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(
@@ -101,20 +76,11 @@ pub struct FormattedItems {
     formatted_items: Vec<FormattedItem>,
 }
 
-impl Invariant for FormattedItems {
-    fn invariant(&self) -> bool {
-        self.formatted_items.iter().all(FormattedItem::invariant)
-    }
-}
-
-#[invariant(self.invariant())]
 impl FormattedItems {
-    #[pre(items.iter().all(Item::invariant))]
-    #[post(ret.invariant())]
     pub fn from_items(items: Vec<Item>) -> Self {
         let width = items
             .iter()
-            .map(|item| format!("{}", item.display_source()).len())
+            .map(|item| item.display_source().len())
             .max()
             .unwrap_or(0);
 
@@ -135,13 +101,11 @@ impl IntoIterator for FormattedItems {
     type IntoIter = <Vec<FormattedItem> as IntoIterator>::IntoIter;
     type Item = <Vec<FormattedItem> as IntoIterator>::Item;
 
-    #[pre(self.invariant())]
     fn into_iter(self) -> Self::IntoIter {
         self.formatted_items.into_iter()
     }
 }
 
-#[invariant(self.invariant())]
 impl<'a> IntoIterator for &'a FormattedItems {
     type IntoIter = <&'a Vec<FormattedItem> as IntoIterator>::IntoIter;
     type Item = <&'a Vec<FormattedItem> as IntoIterator>::Item;
@@ -151,7 +115,6 @@ impl<'a> IntoIterator for &'a FormattedItems {
     }
 }
 
-#[invariant(self.invariant())]
 impl Display for FormattedItems {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         self.formatted_items
