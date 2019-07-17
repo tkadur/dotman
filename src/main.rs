@@ -11,9 +11,9 @@ use std::error;
 
 fn go() -> Result<(), Box<dyn error::Error>> {
     let config = config::get()?;
-    verbose_println!("");
+    verbose_println!();
     let items = FormattedItems::from_items(resolver::get(&config)?);
-    verbose_println!("");
+    verbose_println!();
 
     use config::cli::Command;
     match config.command() {

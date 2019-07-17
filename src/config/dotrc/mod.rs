@@ -91,12 +91,16 @@ mod tests {
     use std::io::Write;
     use tempfile::NamedTempFile;
 
+    fn mock_dotrc(contents: &str) -> Config {
+        let mut dotrc = NamedTempFile::new().unwrap();
+        write!(dotrc, "{}", contents).unwrap();
+
+        super::get(Some(dotrc.path())).unwrap()
+    }
+
     #[test]
     fn empty_dotrc() {
-        let mut dotrc = NamedTempFile::new().unwrap();
-        write!(dotrc, "").unwrap();
-
-        let config = super::get(Some(dotrc.path())).unwrap();
+        let config = mock_dotrc("");
         let expected = Config::default();
 
         assert_eq!(config, expected);
@@ -104,15 +108,13 @@ mod tests {
 
     #[test]
     fn excludes() {
-        let mut dotrc = NamedTempFile::new().unwrap();
         let contents = r#"
-excludes:
-    - python
-    - secrets
-"#;
-        write!(dotrc, "{}", contents).unwrap();
+            excludes:
+                - python
+                - secrets
+        "#;
+        let config = mock_dotrc(contents);
 
-        let config = super::get(Some(dotrc.path())).unwrap();
         let expected = Config {
             excludes: Some(vec![String::from("python"), String::from("secrets")]),
             ..Config::default()
@@ -123,16 +125,14 @@ excludes:
 
     #[test]
     fn tags() {
-        let mut dotrc = NamedTempFile::new().unwrap();
         let contents = r#"
-tags:
-    - haskell
-    - rust
-    - vim
-"#;
-        write!(dotrc, "{}", contents).unwrap();
+            tags:
+                - haskell
+                - rust
+                - vim
+        "#;
+        let config = mock_dotrc(contents);
 
-        let config = super::get(Some(dotrc.path())).unwrap();
         let expected = Config {
             tags: Some(vec![
                 String::from("haskell"),
@@ -147,15 +147,28 @@ tags:
 
     #[test]
     fn dotfiles_path() {
-        let mut dotrc = NamedTempFile::new().unwrap();
         let contents = r#"
-dotfiles-path: ~/.top_secret
-"#;
-        write!(dotrc, "{}", contents).unwrap();
+            dotfiles-path: ~/.top_secret
+        "#;
+        let config = mock_dotrc(contents);
 
-        let config = super::get(Some(dotrc.path())).unwrap();
         let expected = Config {
             dotfiles_path: Some(String::from("~/.top_secret")),
+            ..Config::default()
+        };
+
+        assert_eq!(config, expected);
+    }
+
+    #[test]
+    fn hostname() {
+        let contents = r#"
+            hostname: my-amazing-computer
+        "#;
+        let config = mock_dotrc(contents);
+
+        let expected = Config {
+            hostname: Some(String::from("my-amazing-computer")),
             ..Config::default()
         };
 

@@ -173,7 +173,7 @@ fn merge_dotrc(
     let mut glob_output = || {
         if !had_glob_output {
             had_glob_output = true;
-            verbose_println!("");
+            verbose_println!();
         }
     };
 
