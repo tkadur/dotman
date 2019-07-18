@@ -1,4 +1,5 @@
 use std::{
+    ffi::OsStr,
     io,
     ops::Drop,
     path::{Path, PathBuf},
@@ -28,6 +29,15 @@ pub fn home_to_tilde(path: &Path) -> PathBuf {
     };
 
     PathBuf::from("~").join(relative_path)
+}
+
+/// Checks if a filename is prefixed by a '.' character.
+/// If the path cannot be read as UTF-8, assume it isn't hidden.
+pub fn is_hidden(filename: &OsStr) -> bool {
+    filename
+        .to_str()
+        .map(|s| s.starts_with('.'))
+        .unwrap_or(false)
 }
 
 pub enum FileType {

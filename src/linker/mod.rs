@@ -1,5 +1,5 @@
 use crate::{
-    common::{util, FormattedItem, FormattedItems},
+    common::{util, AbsolutePath, FormattedItem, FormattedItems},
     verbose_println,
 };
 use derive_more::From;
@@ -8,13 +8,13 @@ use std::{
     fmt::{self, Display},
     fs,
     io::{self, Write},
-    path::{Path, PathBuf},
+    path::Path,
 };
 
 #[derive(Debug, From)]
 pub enum Error {
     IoError(io::Error),
-    DirectoryOverwrite(PathBuf),
+    DirectoryOverwrite(AbsolutePath),
 }
 use self::Error::*;
 
@@ -68,7 +68,7 @@ fn link_item(item: &FormattedItem, dry_run: bool) -> Result<(), Error> {
         // If the file at dest is already a link to source, ignore it.
         // Else, ask if it should be overwritten.
         match fs::read_link(item.dest()) {
-            Ok(ref target) if target == item.source() => {
+            Ok(ref target) if target.as_path() == item.source().as_path() => {
                 verbose_println!("Skipping identical {}", item.dest().display())
             },
             _ => {

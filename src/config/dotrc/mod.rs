@@ -25,10 +25,7 @@ pub struct Config {
 /// and will return an empty config. Failure to read the dotrc
 /// file or a malformed dotrc, on the other hand, _is_ considered
 /// an error.
-pub fn get<P>(dotrc_path: Option<P>) -> Result<Config, Error>
-where
-    P: AsRef<Path>,
-{
+pub fn get(dotrc_path: Option<impl AsRef<Path>>) -> Result<Config, Error> {
     let path = match dotrc_path {
         Some(path) => path,
         None => return Ok(Config::default()),

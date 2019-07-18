@@ -1,5 +1,8 @@
-use crate::{common::Item, config::Config, verbose_println};
-// use contracts::*;
+use crate::{
+    common::{util, AbsolutePath, Item},
+    config::Config,
+    verbose_println,
+};
 use derive_more::From;
 use std::{
     collections::HashSet,
@@ -11,59 +14,58 @@ use std::{
 };
 use walkdir::WalkDir;
 
+/// Appends a "." to the start of `path`
+fn make_hidden(path: &Path) -> PathBuf {
+    let path_str = OsString::from(path.as_os_str());
+    let hidden_path = {
+        let mut hidden_path = OsString::from(".");
+        hidden_path.push(path_str);
+
+        hidden_path
+    };
+
+    PathBuf::from(hidden_path)
+}
+
 /// Returns every non-hidden non-excluded file in `dir` (recursively, ignoring
 /// directories).
-fn link_dir_contents(dir: &Path, excludes: &HashSet<&Path>) -> Result<Vec<Item>, Error> {
-    debug_assert!(dir.is_absolute());
-    for exclude in excludes {
-        debug_assert!(exclude.is_absolute());
-    }
-
-    /// Checks if a entry's filename is not prefixed by a '.' character.
-    /// If the path cannot be read as a String, assume it isn't hidden.
-    fn is_not_hidden(entry: &walkdir::DirEntry) -> bool {
-        entry
-            .file_name()
-            .to_str()
-            .map(|s| entry.depth() == 0 || !s.starts_with('.'))
-            .unwrap_or(false)
-    }
-
-    fn make_hidden(path: &Path) -> PathBuf {
-        let path_str = OsString::from(path.as_os_str());
-        let hidden_path = {
-            let mut hidden_path = OsString::from(".");
-            hidden_path.push(path_str);
-
-            hidden_path
-        };
-
-        PathBuf::from(hidden_path)
-    }
-
+fn link_dir_contents(
+    dir: &AbsolutePath,
+    excludes: &HashSet<&AbsolutePath>,
+) -> Result<Vec<Item>, Error> {
     let mut res = vec![];
-    for entry in WalkDir::new(dir).into_iter().filter_entry(is_not_hidden) {
+    for entry in WalkDir::new(dir)
+        .into_iter()
+        .filter_entry(|entry| !util::is_hidden(entry.file_name()))
+    {
         let entry = entry?;
 
-        let path = entry.path();
+        let path = AbsolutePath::from(entry.path());
 
-        if excludes.contains(path) {
+        if excludes.contains(&path) {
             verbose_println!("Excluded {}", path.display());
         }
 
-        if is_not_hidden(&entry) && entry.file_type().is_file() && !excludes.contains(path) {
-            let source = PathBuf::from(path);
+        if !util::is_hidden(entry.file_name())
+            && entry.file_type().is_file()
+            && !excludes.contains(&path)
+        {
             let dest = {
                 let dest_tail = match dir.parent() {
-                    None => path,
+                    None => path.as_path(),
                     Some(parent) => path
                         .strip_prefix(parent)
                         .expect("dir must be a prefix of entry"),
                 };
-                dirs::home_dir()
-                    .ok_or(NoHomeDirectory)?
-                    .join(make_hidden(dest_tail))
+
+                AbsolutePath::from(
+                    dirs::home_dir()
+                        .ok_or(NoHomeDirectory)?
+                        .join(make_hidden(dest_tail)),
+                )
             };
+            let source = path;
+
             res.push(Item::new(source, dest));
         }
     }
@@ -74,35 +76,21 @@ fn link_dir_contents(dir: &Path, excludes: &HashSet<&Path>) -> Result<Vec<Item>,
 /// Finds the items under `path` which are to be symlinked, according to all the
 /// options specified, and place then in `res`
 fn find_items(
-    root: PathBuf,
+    root: AbsolutePath,
     is_prefixed: &impl Fn(&Path) -> bool,
     active_prefixed_dirs: &HashSet<&Path>,
-    excludes: &HashSet<&Path>,
+    excludes: &HashSet<&AbsolutePath>,
     res: &mut Vec<Item>,
 ) -> Result<(), Error> {
-    debug_assert!(root.is_absolute());
-    for exclude in excludes {
-        debug_assert!(exclude.is_absolute());
-    }
-
     for entry in root.read_dir()? {
         let entry = entry?;
-        let path = entry.path();
-        debug_assert!(path.is_absolute());
+        let path = AbsolutePath::from(entry.path());
 
-        let entry_name = PathBuf::from(entry.file_name());
+        let entry_name = entry.file_name();
+        let entry_name = Path::new(&entry_name);
 
-        /// Checks if a filename is prefixed by a '.' character.
-        /// If the path cannot be read as a String, assume it isn't hidden.
-        fn is_hidden(filename: &Path) -> bool {
-            filename
-                .to_str()
-                .map(|s| s.starts_with('.'))
-                .unwrap_or(false)
-        }
-
-        let excluded = excludes.contains(path.as_path());
-        if is_hidden(&entry_name) || excluded {
+        let excluded = excludes.contains(&path);
+        if util::is_hidden(entry_name.as_os_str()) || excluded {
             if excluded {
                 verbose_println!("Excluded {}", path.display());
             }
@@ -110,17 +98,11 @@ fn find_items(
         }
 
         if is_prefixed(&entry_name) {
-            if active_prefixed_dirs.contains(entry_name.as_path()) {
-                find_items(
-                    entry.path(),
-                    is_prefixed,
-                    active_prefixed_dirs,
-                    excludes,
-                    res,
-                )?;
+            if active_prefixed_dirs.contains(entry_name) {
+                find_items(path, is_prefixed, active_prefixed_dirs, excludes, res)?;
             }
         } else {
-            let contents = link_dir_contents(&entry.path(), excludes)?;
+            let contents = link_dir_contents(&AbsolutePath::from(entry.path()), excludes)?;
             res.extend(contents);
         }
     }
@@ -157,7 +139,7 @@ pub fn get(config: &Config) -> Result<Vec<Item>, Error> {
         .map(|p| p.as_path())
         .collect();
 
-    let excludes = config.excludes().iter().map(PathBuf::as_path).collect();
+    let excludes = config.excludes().iter().collect();
 
     let mut res = vec![];
 
@@ -189,7 +171,7 @@ pub enum Error {
     /// Indicates when there are multiple active sources pointing to the same
     /// destination.
     DuplicateFiles {
-        dest: PathBuf,
+        dest: AbsolutePath,
     },
     IoError(io::Error),
     WalkdirError(walkdir::Error),

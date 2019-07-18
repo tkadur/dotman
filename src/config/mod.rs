@@ -1,7 +1,10 @@
 pub mod cli;
 mod dotrc;
 
-use crate::{common::util, verbose_println};
+use crate::{
+    common::{util, AbsolutePath},
+    verbose_println,
+};
 use derive_getters::Getters;
 use derive_more::From;
 use gethostname::gethostname;
@@ -28,9 +31,9 @@ lazy_static! {
 /// All dotman configuration options
 #[derive(Debug, Getters)]
 pub struct Config {
-    excludes: Vec<PathBuf>,
+    excludes: Vec<AbsolutePath>,
     tags: Vec<String>,
-    dotfiles_path: PathBuf,
+    dotfiles_path: AbsolutePath,
     hostname: String,
     command: cli::Command,
 }
@@ -81,9 +84,17 @@ impl PartialConfig {
     }
 
     fn to_config(&self) -> Config {
-        let excludes = self.excludes.clone();
+        let excludes = self
+            .excludes
+            .iter()
+            .map(|exclude| AbsolutePath::from(exclude.clone()))
+            .collect();
         let tags = self.tags.clone();
-        let (dotfiles_path, _) = self.dotfiles_path.clone();
+        let dotfiles_path = {
+            let (dotfiles_path, _) = self.dotfiles_path.clone();
+
+            AbsolutePath::from(dotfiles_path)
+        };
         let (hostname, _) = self.hostname.clone();
         let command = self.command.clone();
 
@@ -165,7 +176,10 @@ fn merge_dotrc(
             .and_then(expand_tilde)
             .map(PathBuf::from);
 
-        merge_hierarchy(partial_config.dotfiles_path, dotrc_dotfiles_path)
+        AbsolutePath::from(merge_hierarchy(
+            partial_config.dotfiles_path,
+            dotrc_dotfiles_path,
+        ))
     };
 
     // Just to improve whitespace in verbose output about glob expansion
@@ -178,7 +192,7 @@ fn merge_dotrc(
     };
 
     let excludes = {
-        let mut excludes: Vec<PathBuf> =
+        let mut excludes: Vec<AbsolutePath> =
             // Merge the excludes from partial_config (CLI + default) with the excludes from the dotrc
             util::append_vecs(
                 partial_config.excludes,
@@ -244,7 +258,7 @@ fn merge_dotrc(
             .flatten()
             // Finally, make each exclude path absolute by prepending them with
             // the dotfiles path
-            .map(|exclude| dotfiles_path.join(exclude))
+            .map(|exclude| AbsolutePath::from(dotfiles_path.join(exclude)))
             .collect();
 
         // Finally, remove any duplicate entries due to files matching multiple globs
@@ -280,7 +294,7 @@ fn merge_dotrc(
 /// - Any `tag-` folders matching the tags in `partial_config` (the tags are
 ///   searched in an unspecified order)
 /// - The default location (`~/.dotrc`)
-fn find_dotrc(partial_config: &PartialConfig) -> Option<PathBuf> {
+fn find_dotrc(partial_config: &PartialConfig) -> Option<AbsolutePath> {
     let config = partial_config.to_config();
 
     // Try to check if a dotrc was among the files discovered from partial_config
@@ -300,20 +314,23 @@ fn find_dotrc(partial_config: &PartialConfig) -> Option<PathBuf> {
     for dotrc_name in DOTRC_NAMES.iter() {
         let dotrc_path = home_dir.join(dotrc_name);
         if dotrc_path.exists() {
-            return Some(dotrc_path);
+            return Some(AbsolutePath::from(dotrc_path));
         }
     }
 
     None
 }
 
+/// Loads the complete configuration.
+///
+/// Draws from CLI arguments, the dotrc, and default values (where applicable)
 pub fn get() -> Result<Config, Error> {
     let cli_config = cli::Config::get();
 
     // We want to avoid incorrect/duplicate verbose output from
     // the partial config pass
     let (partial_config, dotrc_config) = {
-        let _x = util::with_verbosity(false);
+        let _v = util::with_verbosity(false);
 
         let partial_config = PartialConfig::merge(cli_config, DefaultConfig::get()?);
         let dotrc_config = dotrc::get(find_dotrc(&partial_config))?;
@@ -321,12 +338,6 @@ pub fn get() -> Result<Config, Error> {
         (partial_config, dotrc_config)
     };
     let config = merge_dotrc(partial_config, dotrc_config)?;
-
-    // Check invariants
-    for exclude in config.excludes() {
-        debug_assert!(exclude.is_absolute())
-    }
-    debug_assert!(config.dotfiles_path().is_absolute());
 
     Ok(config)
 }

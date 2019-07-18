@@ -1,22 +1,65 @@
 pub mod util;
 
+use contracts::*;
 use derive_getters::Getters;
 use std::{
+    convert::{AsRef, From},
     fmt::{self, Display},
     iter::IntoIterator,
-    path::PathBuf,
+    ops::Deref,
+    path::{Path, PathBuf},
 };
+
+#[derive(Clone, Debug, Eq, Hash, PartialEq)]
+pub struct AbsolutePath {
+    path: PathBuf,
+}
+
+// I'd like to have a blanket `From<P> where P: AsRef<Path>` impl,
+// but that won't work until you can add a `P != AbsolutePath` constraint.
+// Otherwise, you run up against the blanket `From<T> for T` impl.
+// See https://github.com/rust-lang/rfcs/issues/1834.
+//
+// For now, I'll just have to deal with writing relevant impls by hand.
+
+impl From<PathBuf> for AbsolutePath {
+    #[pre(path.is_absolute())]
+    fn from(path: PathBuf) -> Self {
+        AbsolutePath { path }
+    }
+}
+
+impl From<&Path> for AbsolutePath {
+    #[pre(path.is_absolute())]
+    fn from(path: &Path) -> Self {
+        AbsolutePath {
+            path: path.to_path_buf(),
+        }
+    }
+}
+
+impl Deref for AbsolutePath {
+    type Target = PathBuf;
+
+    fn deref(&self) -> &Self::Target {
+        &self.path
+    }
+}
+
+impl AsRef<Path> for AbsolutePath {
+    fn as_ref(&self) -> &Path {
+        self.path.as_ref()
+    }
+}
 
 #[derive(Debug, Getters)]
 pub struct Item {
-    source: PathBuf,
-    dest: PathBuf,
+    source: AbsolutePath,
+    dest: AbsolutePath,
 }
 
 impl Item {
-    pub fn new(source: PathBuf, dest: PathBuf) -> Self {
-        debug_assert!(source.is_absolute());
-        debug_assert!(dest.is_absolute());
+    pub fn new(source: AbsolutePath, dest: AbsolutePath) -> Self {
         Item { source, dest }
     }
 
@@ -51,7 +94,7 @@ impl FormattedItem {
     }
 }
 
-impl std::ops::Deref for FormattedItem {
+impl Deref for FormattedItem {
     type Target = Item;
 
     fn deref(&self) -> &Self::Target {
