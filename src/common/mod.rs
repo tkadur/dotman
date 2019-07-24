@@ -10,14 +10,21 @@ use std::{
     path::{Path, PathBuf},
 };
 
+/// Represents an (owned) path which must be absolute
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
 pub struct AbsolutePath {
     path: PathBuf,
 }
 
-// I'd like to have a blanket `From<P> where P: AsRef<Path>` impl,
-// but that won't work until you can add a `P != AbsolutePath` constraint.
-// Otherwise, you run up against the blanket `From<T> for T` impl.
+impl Display for AbsolutePath {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{}", util::home_to_tilde(&self.path).display())
+    }
+}
+
+// I'd like to have a blanket `impl From<P> where P: AsRef<Path> for
+// AbsolutePath`, but that won't work until you can add a `P != AbsolutePath`
+// constraint. Otherwise, you run up against the blanket `impl From<T> for T`.
 // See https://github.com/rust-lang/rfcs/issues/1834.
 //
 // For now, I'll just have to deal with writing relevant impls by hand.
@@ -62,20 +69,6 @@ impl Item {
     pub fn new(source: AbsolutePath, dest: AbsolutePath) -> Self {
         Item { source, dest }
     }
-
-    pub fn display_source(&self) -> String {
-        format!("{}", util::home_to_tilde(&self.source).display())
-    }
-
-    pub fn display_dest(&self) -> String {
-        format!("{}", util::home_to_tilde(&self.dest).display())
-    }
-}
-
-impl Display for Item {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{} -> {}", self.display_source(), self.display_dest())
-    }
 }
 
 /// Just a wrapper for pretty-formatting Item by aligning the
@@ -107,8 +100,8 @@ impl Display for FormattedItem {
         write!(
             f,
             "{:width$}  ->    {}",
-            self.item().display_source(),
-            self.item().display_dest(),
+            self.item().source(),
+            self.item().dest(),
             width = self.width
         )
     }
@@ -123,7 +116,7 @@ impl FormattedItems {
     pub fn from_items(items: Vec<Item>) -> Self {
         let width = items
             .iter()
-            .map(|item| item.display_source().len())
+            .map(|item| format!("{}", item.source()).len())
             .max()
             .unwrap_or(0);
 

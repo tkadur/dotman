@@ -1,7 +1,7 @@
+use lazy_static::lazy_static;
 use std::{
     ffi::OsStr,
     io,
-    ops::Drop,
     path::{Path, PathBuf},
     sync::atomic::{AtomicBool, Ordering},
 };
@@ -14,17 +14,27 @@ pub fn append_vecs<T>(x: Vec<T>, mut y: Vec<T>) -> Vec<T> {
     res
 }
 
+lazy_static! {
+    static ref HOME_DIR: PathBuf = match dirs::home_dir() {
+        Some(home_dir) => home_dir,
+        None => {
+            eprintln!("Error: couldn't find home directory");
+            std::process::exit(1);
+        },
+    };
+}
+
+pub fn home_dir() -> &'static Path {
+    HOME_DIR.as_path()
+}
+
 /// Tries to replace absolute paths of the home directory
 /// with a tilde for readability. If that fails for any reason, just
 /// return `path`.
 pub fn home_to_tilde(path: &Path) -> PathBuf {
-    let home_dir = match dirs::home_dir() {
-        Some(home_dir) => home_dir,
-        None => return PathBuf::from(path),
-    };
-
-    let relative_path = match path.strip_prefix(home_dir) {
+    let relative_path = match path.strip_prefix(home_dir()) {
         Ok(relative_path) => relative_path,
+        // The home directory isn't a prefix of `path` - just return `path` unchanged
         Err(_) => return PathBuf::from(path),
     };
 
@@ -69,49 +79,6 @@ pub fn set_verbosity(verbosity: bool) {
 
 pub fn get_verbosity() -> bool {
     VERBOSE.load(Ordering::SeqCst)
-}
-
-pub struct WithVerbosity {
-    old_verbosity: bool,
-}
-
-impl Drop for WithVerbosity {
-    fn drop(&mut self) {
-        set_verbosity(self.old_verbosity);
-    }
-}
-
-/// Sets the verbosity to `verbosity` within the current scope.
-/// Returns an RAII object which resets the verbosity when it gets dropped.
-///
-/// Example usage:
-/// ```
-/// set_verbosity(true);
-///
-/// # assert_eq!(get_verbosity(), true);
-/// // Make sure verbosity is off for this part
-/// {
-///     let _x = with_verbosity(false);
-///     # assert_eq!(get_verbosity(), false);
-///
-///     // Actually, turn verbosity back on for a bit
-///     {
-///         let _x = with_verbosity(true);
-///         # assert_eq!(get_verbosity(), true);
-///     }
-///     // Verbosity gets turned back off
-///     # assert_eq!(get_verbosity(), false);
-/// }
-/// // Verbosity gets turned back on
-/// # assert_eq!(get_verbosity(), true);
-/// ```
-pub fn with_verbosity(verbosity: bool) -> WithVerbosity {
-    let res = WithVerbosity {
-        old_verbosity: get_verbosity(),
-    };
-    set_verbosity(verbosity);
-
-    res
 }
 
 #[macro_export]

@@ -4,11 +4,10 @@ use crate::{
     verbose_println,
 };
 use derive_more::From;
+use failure::Fail;
 use std::{
     collections::HashSet,
-    error,
     ffi::OsString,
-    fmt::{self, Display},
     io, iter,
     path::{Path, PathBuf},
 };
@@ -43,7 +42,7 @@ fn link_dir_contents(
         let path = AbsolutePath::from(entry.path());
 
         if excludes.contains(&path) {
-            verbose_println!("Excluded {}", path.display());
+            verbose_println!("Excluded {}", path);
         }
 
         if !util::is_hidden(entry.file_name())
@@ -58,11 +57,7 @@ fn link_dir_contents(
                         .expect("dir must be a prefix of entry"),
                 };
 
-                AbsolutePath::from(
-                    dirs::home_dir()
-                        .ok_or(NoHomeDirectory)?
-                        .join(make_hidden(dest_tail)),
-                )
+                AbsolutePath::from(util::home_dir().join(make_hidden(dest_tail)))
             };
             let source = path;
 
@@ -92,7 +87,7 @@ fn find_items(
         let excluded = excludes.contains(&path);
         if util::is_hidden(entry_name.as_os_str()) || excluded {
             if excluded {
-                verbose_println!("Excluded {}", path.display());
+                verbose_println!("Excluded {}", path);
             }
             continue;
         }
@@ -165,46 +160,17 @@ pub fn get(config: &Config) -> Result<Vec<Item>, Error> {
     Ok(res)
 }
 
-#[derive(Debug, From)]
+#[derive(Debug, From, Fail)]
 pub enum Error {
-    NoHomeDirectory,
     /// Indicates when there are multiple active sources pointing to the same
     /// destination.
-    DuplicateFiles {
-        dest: AbsolutePath,
-    },
-    IoError(io::Error),
-    WalkdirError(walkdir::Error),
+    #[fail(display = "multiple source files for destination {}", dest)]
+    DuplicateFiles { dest: AbsolutePath },
+
+    #[fail(display = "error reading from dotfiles directory ({})", _0)]
+    IoError(#[fail(cause)] io::Error),
+
+    #[fail(display = "error reading from dotfiles directory ({})", _0)]
+    WalkdirError(#[fail(cause)] walkdir::Error),
 }
 use self::Error::*;
-
-impl Display for Error {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        let error_msg = match self {
-            NoHomeDirectory => String::from("can't find home directory"),
-            DuplicateFiles { dest } => {
-                format!("multiple source files for destination {}", dest.display())
-            },
-            IoError(error) => format!(
-                "error reading from dotfiles directory ({})",
-                error.to_string()
-            ),
-            WalkdirError(error) => format!(
-                "error reading from dotfiles directory ({})",
-                error.to_string()
-            ),
-        };
-
-        write!(f, "{}", error_msg)
-    }
-}
-
-impl error::Error for Error {
-    fn source(&self) -> Option<&(dyn error::Error + 'static)> {
-        match self {
-            NoHomeDirectory | DuplicateFiles { .. } => None,
-            IoError(error) => Some(error),
-            WalkdirError(error) => Some(error),
-        }
-    }
-}

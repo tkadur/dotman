@@ -7,9 +7,8 @@ mod linker;
 mod resolver;
 
 use common::FormattedItems;
-use std::error;
 
-fn go() -> Result<(), Box<dyn error::Error>> {
+fn go() -> Result<(), failure::Error> {
     let config = config::get()?;
     verbose_println!();
     let items = FormattedItems::from_items(resolver::get(&config)?);

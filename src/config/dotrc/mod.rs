@@ -1,16 +1,15 @@
 use derive_more::From;
+use failure::Fail;
 use serde::Deserialize;
 use std::{
-    error,
-    fmt::{self, Display},
     fs,
     io::{self, Read},
     path::Path,
 };
 
+/// Configuration options available in dotrc
 #[derive(Debug, Default, Deserialize, PartialEq, Eq)]
 #[serde(deny_unknown_fields)]
-/// Configuration options available in dotrc
 pub struct Config {
     pub excludes: Option<Vec<String>>,
     pub tags: Option<Vec<String>>,
@@ -54,31 +53,12 @@ pub fn get(dotrc_path: Option<impl AsRef<Path>>) -> Result<Config, Error> {
     Ok(config)
 }
 
-#[derive(Debug, From)]
+#[derive(Debug, From, Fail)]
 pub enum Error {
-    ParseError(serde_yaml::Error),
-    IoError(io::Error),
-}
-use self::Error::*;
-
-impl Display for Error {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        let error_msg = match self {
-            ParseError(error) => format!("error parsing .dotrc ({})", error),
-            IoError(error) => format!("error reading .dotrc ({})", error),
-        };
-
-        write!(f, "{}", error_msg)
-    }
-}
-
-impl error::Error for Error {
-    fn source(&self) -> Option<&(dyn error::Error + 'static)> {
-        match self {
-            ParseError(error) => Some(error),
-            IoError(error) => Some(error),
-        }
-    }
+    #[fail(display = "error parsing .dotrc ({})", _0)]
+    ParseError(#[fail(cause)] serde_yaml::Error),
+    #[fail(display = "error reading .dotrc ({})", _0)]
+    IoError(#[fail(cause)] io::Error),
 }
 
 #[cfg(test)]

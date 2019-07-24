@@ -3,40 +3,41 @@ use crate::{
     verbose_println,
 };
 use derive_more::From;
+use failure::Fail;
 use std::{
-    error,
-    fmt::{self, Display},
     fs,
     io::{self, Write},
     path::Path,
 };
 
-#[derive(Debug, From)]
-pub enum Error {
-    IoError(io::Error),
-    DirectoryOverwrite(AbsolutePath),
+enum YN {
+    Yes,
+    No,
 }
-use self::Error::*;
+use self::YN::*;
 
-impl Display for Error {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        let error_msg = match self {
-            IoError(error) => format!("error creating symlinks ({})", error),
-            DirectoryOverwrite(path) => format!(
-                "won't delete directory {}. Please remove it manually if you want.",
-                path.display()
-            ),
-        };
+/// Prompts the user with `prompt` and asks for a yes/no answer.
+/// Will continue asking until input resembling yes/no is given.
+fn read_yes_or_no(prompt: &str) -> io::Result<YN> {
+    let mut buf = String::new();
+    loop {
+        print!("{} (y/n) ", prompt);
+        io::stdout().flush()?;
 
-        write!(f, "{}", error_msg)
-    }
-}
+        io::stdin().read_line(&mut buf)?;
+        buf = buf.trim().to_lowercase();
 
-impl error::Error for Error {
-    fn source(&self) -> Option<&(dyn error::Error + 'static)> {
-        match self {
-            IoError(error) => Some(error),
-            DirectoryOverwrite(_) => None,
+        if buf.is_empty() {
+            continue;
+        }
+
+        if buf.starts_with("yes") || "yes".starts_with(&buf) {
+            return Ok(Yes);
+        } else if buf.starts_with("no") || "no".starts_with(&buf) {
+            return Ok(No);
+        } else {
+            buf.clear();
+            continue;
         }
     }
 }
@@ -47,7 +48,9 @@ fn symlink(source: impl AsRef<Path>, dest: impl AsRef<Path>) -> io::Result<()> {
 }
 
 fn link_item(item: &FormattedItem, dry_run: bool) -> Result<(), Error> {
-    // Performs tha actual linking after all validation
+    let (source, dest) = (item.source(), item.dest());
+
+    // Performs the actual linking after all validation
     // is finished.
     let link = |item: &FormattedItem| -> Result<(), Error> {
         verbose_println!("Linking {}", item);
@@ -56,43 +59,44 @@ fn link_item(item: &FormattedItem, dry_run: bool) -> Result<(), Error> {
             return Ok(());
         }
 
-        let dest = item.dest();
-
         fs::create_dir_all(dest.parent().unwrap_or(dest))?;
-        symlink(item.source(), item.dest())?;
+        symlink(source, dest)?;
 
         Ok(())
     };
 
-    if item.dest().exists() {
-        // If the file at dest is already a link to source, ignore it.
-        // Else, ask if it should be overwritten.
-        match fs::read_link(item.dest()) {
-            Ok(ref target) if target.as_path() == item.source().as_path() => {
-                verbose_println!("Skipping identical {}", item.dest().display())
+    if !dest.exists() {
+        link(item)?
+    } else {
+        match fs::read_link(dest) {
+            // If the file at `dest` is already a link to source, ignore it.
+            Ok(ref target) if target.as_path() == source.as_path() => {
+                verbose_println!("Skipping identical {}", dest)
             },
+            // If the file at `dest` is anything else, ask if it should be overwritten
             _ => {
-                print!("Overwrite {}? (y/n) ", item.dest().display());
-                io::stdout().flush()?;
-
-                let mut buf = String::new();
-                io::stdin().read_line(&mut buf)?;
-                buf = buf.trim().to_lowercase();
-                if buf.starts_with("yes") || "yes".starts_with(&buf) {
-                    match util::file_type(item.dest())? {
-                        util::FileType::Directory => {
-                            return Err(DirectoryOverwrite(item.dest().clone()))
-                        },
-                        util::FileType::File | util::FileType::Symlink => {
-                            fs::remove_file(item.dest())?
-                        },
-                    };
-                    link(item)?;
+                let prompt = format!("Overwrite {}?", dest);
+                match read_yes_or_no(&prompt)? {
+                    No => println!("Skipping {}", dest),
+                    Yes => {
+                        match util::file_type(dest)? {
+                            util::FileType::File | util::FileType::Symlink => {
+                                fs::remove_file(dest)?
+                            },
+                            // To be careful, we don't want to overwrite directories. Especially
+                            // since dotman currently only links files and not whole directories.
+                            // To make sure the user _absolutely_ wants to overwrite a directory
+                            // with a file symlink, we ask them to delete the directory manually
+                            // before running dotman.
+                            util::FileType::Directory => {
+                                return Err(DirectoryOverwrite(dest.clone()))
+                            },
+                        };
+                        link(item)?;
+                    },
                 }
             },
         }
-    } else {
-        link(item)?
     }
 
     Ok(())
@@ -105,3 +109,15 @@ pub fn link_items(items: FormattedItems, dry_run: bool) -> Result<(), Error> {
 
     Ok(())
 }
+
+#[derive(Debug, From, Fail)]
+pub enum Error {
+    #[fail(display = "error creating symlinks ({})", _0)]
+    IoError(#[fail(cause)] io::Error),
+    #[fail(
+        display = "won't delete directory {}. Please remove it manually if you want.",
+        _0
+    )]
+    DirectoryOverwrite(AbsolutePath),
+}
+use self::Error::*;

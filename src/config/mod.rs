@@ -7,15 +7,14 @@ use crate::{
 };
 use derive_getters::Getters;
 use derive_more::From;
+use failure::Fail;
 use gethostname::gethostname;
 use globset::Glob;
 use lazy_static::lazy_static;
 use std::{
     collections::HashSet,
-    error,
     ffi::OsStr,
-    fmt::{self, Display},
-    path::PathBuf,
+    path::{Path, PathBuf},
 };
 use walkdir::WalkDir;
 
@@ -38,7 +37,7 @@ pub struct Config {
     command: cli::Command,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 enum PartialSource {
     Cli,
     Default,
@@ -83,28 +82,42 @@ impl PartialConfig {
         }
     }
 
-    fn to_config(&self) -> Config {
+    fn to_config(&self) -> Result<Config, walkdir::Error> {
+        let dotfiles_path = {
+            let (dotfiles_path, _) = &self.dotfiles_path;
+
+            AbsolutePath::from(dotfiles_path.clone())
+        };
+
         let excludes = self
             .excludes
             .iter()
+            // Glob-expand
+            .map(|exclude| expand_glob(exclude, &dotfiles_path))
+            .collect::<Result<Vec<_>, _>>()?
+            .into_iter()
+            .flatten()
+            // Wrap with `AbsolutePath`s
             .map(|exclude| AbsolutePath::from(exclude.clone()))
             .collect();
-        let tags = self.tags.clone();
-        let dotfiles_path = {
-            let (dotfiles_path, _) = self.dotfiles_path.clone();
 
-            AbsolutePath::from(dotfiles_path)
+        let tags = self.tags.clone();
+
+        let hostname = {
+            let (hostname, _) = &self.hostname;
+
+            hostname.clone()
         };
-        let (hostname, _) = self.hostname.clone();
+
         let command = self.command.clone();
 
-        Config {
+        Ok(Config {
             excludes,
             tags,
             dotfiles_path,
             hostname,
             command,
-        }
+        })
     }
 }
 
@@ -122,9 +135,7 @@ impl DefaultConfig {
         let excludes = vec![];
         let tags = vec![];
 
-        let dotfiles_path = dirs::home_dir()
-            .ok_or(NoHomeDirectory)?
-            .join(DEFAULT_DOTFILES_DIR);
+        let dotfiles_path = util::home_dir().join(DEFAULT_DOTFILES_DIR);
 
         let hostname = gethostname().to_str().ok_or(NoSystemHostname)?.to_owned();
 
@@ -135,6 +146,64 @@ impl DefaultConfig {
             hostname,
         })
     }
+}
+
+/// Tries to glob-expand `path`.
+/// If `PathBuf` -> `String` conversion fails or the pattern is invalid,
+/// fall back to simply not trying to glob-expand
+fn expand_glob(path: &Path, dotfiles_path: &AbsolutePath) -> Result<Vec<PathBuf>, walkdir::Error> {
+    // Just to improve whitespace in verbose output about glob expansion
+    let mut had_glob_output = false;
+    let mut glob_output = || {
+        if !had_glob_output {
+            had_glob_output = true;
+            verbose_println!();
+        }
+    };
+
+    let glob = match path.to_str().map(Glob::new) {
+        Some(Ok(glob)) => glob.compile_matcher(),
+        None | Some(Err(_)) => {
+            glob_output();
+            verbose_println!("Could not glob-expand {}", path.display());
+            return Ok(vec![PathBuf::from(path)]);
+        },
+    };
+
+    let entries: Vec<walkdir::DirEntry> = WalkDir::new(dotfiles_path)
+        .follow_links(true)
+        .into_iter()
+        .collect::<Result<_, _>>()?;
+
+    let expanded_paths: Vec<_> = entries
+        .into_iter()
+        .filter_map(|entry| {
+            let entry_path = entry
+                .path()
+                .strip_prefix(dotfiles_path)
+                .expect("Entry should be in the dotfiles path");
+
+            if glob.is_match(entry_path) {
+                Some(PathBuf::from(entry_path))
+            } else {
+                None
+            }
+        })
+        .collect();
+
+    // If an entry just got expanded to itself, don't print anything about it
+    match &expanded_paths.as_slice() {
+        [expanded_path] if expanded_path == path => (),
+        _ => {
+            glob_output();
+            verbose_println!("Glob-expanded {} to:", path.display());
+            for expanded_path in &expanded_paths {
+                verbose_println!("\t- {}", expanded_path.display())
+            }
+        },
+    }
+
+    Ok(expanded_paths)
 }
 
 /// Merges a partial config (obtained from the CLI and default settings) with a
@@ -163,7 +232,7 @@ fn merge_dotrc(
     fn expand_tilde(path: String) -> Option<String> {
         Some(
             if path.starts_with('~') {
-                path.replacen("~", dirs::home_dir()?.to_str()?, 1)
+                path.replacen("~", util::home_dir().to_str()?, 1)
             } else {
                 path
             },
@@ -182,15 +251,6 @@ fn merge_dotrc(
         ))
     };
 
-    // Just to improve whitespace in verbose output about glob expansion
-    let mut had_glob_output = false;
-    let mut glob_output = || {
-        if !had_glob_output {
-            had_glob_output = true;
-            verbose_println!();
-        }
-    };
-
     let excludes = {
         let mut excludes: Vec<AbsolutePath> =
             // Merge the excludes from partial_config (CLI + default) with the excludes from the dotrc
@@ -207,52 +267,9 @@ fn merge_dotrc(
             )
             .into_iter()
             // Try to glob expand each exclude
-            // If PathBuf -> String conversion fails or the pattern is invalid,
-            // fall back to simply not trying to glob-expand
-            .map(|path: PathBuf| -> Result<Vec<PathBuf>, walkdir::Error> {
-                let glob = match path.to_str().map(Glob::new) {
-                    Some(Ok(glob)) => glob.compile_matcher(),
-                    None | Some(Err(_)) => {
-                        glob_output();
-                        verbose_println!("Could not glob-expand {}", path.display());
-                        return Ok(vec![path]);
-                    },
-                };
-
-                let entries: Vec<walkdir::DirEntry> = WalkDir::new(&dotfiles_path)
-                    .follow_links(true)
-                    .into_iter()
-                    .collect::<Result<_, _>>()?;
-
-                let expanded_paths: Vec<_> = entries
-                    .into_iter()
-                    .filter_map(|entry| {
-                        let entry_path = entry.path().strip_prefix(&dotfiles_path).expect("Entry must be in the dotfiles path");
-
-                        if glob.is_match(entry_path) {
-                            Some(PathBuf::from(entry_path))
-                        } else {
-                            None
-                        }
-                    })
-                    .collect();
-
-                // If an entry just got expanded to itself, don't print anything about it
-                match &expanded_paths.as_slice() {
-                    [expanded_path] if expanded_path == &path => (),
-                    _ => {
-                        glob_output();
-                        verbose_println!("Glob-expanded {} to:", path.display());
-                        for expanded_path in &expanded_paths {
-                            verbose_println!("\t- {}", expanded_path.display())
-                        }
-                    },
-                }
-
-                Ok(expanded_paths)
-            })
+            .map(|path| expand_glob(&path, &dotfiles_path))
             // If any glob expansion failed due to an I/O error, give up
-            .collect::<Result<Vec<Vec<PathBuf>>, _>>()?
+            .collect::<Result<Vec<Vec<_>>, _>>()?
             // Then flatten the glob-expanded results
             .into_iter()
             .flatten()
@@ -295,14 +312,14 @@ fn merge_dotrc(
 ///   searched in an unspecified order)
 /// - The default location (`~/.dotrc`)
 fn find_dotrc(partial_config: &PartialConfig) -> Option<AbsolutePath> {
-    let config = partial_config.to_config();
+    let config = partial_config.to_config().ok()?;
 
     // Try to check if a dotrc was among the files discovered from partial_config
     let items = crate::resolver::get(&config).ok()?;
     for item in items {
         match item.dest().file_name() {
             Some(name) if DOTRC_NAMES.contains(&name) => {
-                verbose_println!("Discovered dotrc at {}", item.source().display());
+                verbose_println!("Discovered dotrc at {}", item.source());
                 return Some(item.source().clone());
             },
             _ => (),
@@ -310,9 +327,8 @@ fn find_dotrc(partial_config: &PartialConfig) -> Option<AbsolutePath> {
     }
 
     // Otherwise, try to find a dotrc in the home directory
-    let home_dir = dirs::home_dir()?;
     for dotrc_name in DOTRC_NAMES.iter() {
-        let dotrc_path = home_dir.join(dotrc_name);
+        let dotrc_path = util::home_dir().join(dotrc_name);
         if dotrc_path.exists() {
             return Some(AbsolutePath::from(dotrc_path));
         }
@@ -325,53 +341,20 @@ fn find_dotrc(partial_config: &PartialConfig) -> Option<AbsolutePath> {
 ///
 /// Draws from CLI arguments, the dotrc, and default values (where applicable)
 pub fn get() -> Result<Config, Error> {
-    let cli_config = cli::Config::get();
-
-    // We want to avoid incorrect/duplicate verbose output from
-    // the partial config pass
-    let (partial_config, dotrc_config) = {
-        let _v = util::with_verbosity(false);
-
-        let partial_config = PartialConfig::merge(cli_config, DefaultConfig::get()?);
-        let dotrc_config = dotrc::get(find_dotrc(&partial_config))?;
-
-        (partial_config, dotrc_config)
-    };
+    let partial_config = PartialConfig::merge(cli::Config::get(), DefaultConfig::get()?);
+    let dotrc_config = dotrc::get(find_dotrc(&partial_config))?;
     let config = merge_dotrc(partial_config, dotrc_config)?;
 
     Ok(config)
 }
 
-#[derive(Debug, From)]
+#[derive(Fail, Debug, From)]
 pub enum Error {
+    #[fail(display = "error reading system hostname")]
     NoSystemHostname,
-    NoHomeDirectory,
-    WalkdirError(walkdir::Error),
-    DotrcError(dotrc::Error),
+    #[fail(display = "error reading file or directory ({})", _0)]
+    WalkdirError(#[fail(cause)] walkdir::Error),
+    #[fail(display = "{}", _0)]
+    DotrcError(#[fail(cause)] dotrc::Error),
 }
 use self::Error::*;
-
-impl Display for Error {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        let error_msg = match self {
-            NoSystemHostname => String::from("error reading system hostname"),
-            NoHomeDirectory => String::from("error finding home directory"),
-            WalkdirError(error) => {
-                format!("error reading file or directory ({})", error.to_string())
-            },
-            DotrcError(error) => error.to_string(),
-        };
-
-        write!(f, "{}", error_msg)
-    }
-}
-
-impl error::Error for Error {
-    fn source(&self) -> Option<&(dyn error::Error + 'static)> {
-        match self {
-            WalkdirError(error) => Some(error),
-            DotrcError(error) => Some(error),
-            NoSystemHostname | NoHomeDirectory => None,
-        }
-    }
-}
