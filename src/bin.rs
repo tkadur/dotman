@@ -1,12 +1,7 @@
 #![warn(clippy::all)]
 
-#[macro_use]
-mod common;
-mod config;
-mod linker;
-mod resolver;
-
 use common::FormattedItems;
+use lib::*;
 
 fn go() -> Result<(), failure::Error> {
     let config = config::get()?;

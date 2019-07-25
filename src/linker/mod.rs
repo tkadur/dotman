@@ -3,7 +3,7 @@ use crate::{
     verbose_println,
 };
 use derive_more::From;
-use failure::Fail;
+use failure::*;
 use std::{
     fs,
     io::{self, Write},
@@ -114,6 +114,7 @@ pub fn link_items(items: FormattedItems, dry_run: bool) -> Result<(), Error> {
 pub enum Error {
     #[fail(display = "error creating symlinks ({})", _0)]
     IoError(#[fail(cause)] io::Error),
+
     #[fail(
         display = "won't delete directory {}. Please remove it manually if you want.",
         _0

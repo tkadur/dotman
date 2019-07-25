@@ -2,6 +2,7 @@ pub mod util;
 
 use contracts::*;
 use derive_getters::Getters;
+use itertools::Itertools;
 use std::{
     convert::{AsRef, From},
     fmt::{self, Display},
@@ -45,6 +46,12 @@ impl From<&Path> for AbsolutePath {
     }
 }
 
+impl From<&str> for AbsolutePath {
+    fn from(path: &str) -> Self {
+        AbsolutePath::from(Path::new(path))
+    }
+}
+
 impl Deref for AbsolutePath {
     type Target = PathBuf;
 
@@ -59,6 +66,9 @@ impl AsRef<Path> for AbsolutePath {
     }
 }
 
+/// Represents the location of a dotfile (the source) and the
+/// location of the symlink pointing to the source (the destination) as a pair
+/// of absolute paths to the two files.
 #[derive(Debug, Getters)]
 pub struct Item {
     source: AbsolutePath,
@@ -66,25 +76,21 @@ pub struct Item {
 }
 
 impl Item {
-    pub fn new(source: AbsolutePath, dest: AbsolutePath) -> Self {
-        Item { source, dest }
+    pub fn new(source: impl Into<AbsolutePath>, dest: impl Into<AbsolutePath>) -> Self {
+        Item {
+            source: source.into(),
+            dest: dest.into(),
+        }
     }
 }
 
-/// Just a wrapper for pretty-formatting Item by aligning the
-/// arrows in the `Display` impl.
+/// Just a wrapper for pretty-printing `Item`s
 ///
 /// This type is not meant to be constructed directly. Instead,
-/// use `FormattedItems`.
+/// use `FormattedItems::from_items`.
 pub struct FormattedItem {
     item: Item,
     width: usize,
-}
-
-impl FormattedItem {
-    pub fn item(&self) -> &Item {
-        &self.item
-    }
 }
 
 impl Deref for FormattedItem {
@@ -97,11 +103,12 @@ impl Deref for FormattedItem {
 
 impl Display for FormattedItem {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        println!("{:width$} asdf", self.source(), width = 100);
         write!(
             f,
             "{:width$}  ->    {}",
-            self.item().source(),
-            self.item().dest(),
+            self.source(),
+            self.dest(),
             width = self.width
         )
     }
@@ -113,10 +120,70 @@ pub struct FormattedItems {
 }
 
 impl FormattedItems {
+    /// Formats items in a group to ensure uniform formatting.
+    ///
+    /// For example:
+    /// ```
+    /// # use crate::lib::common::{Item, FormattedItems};
+    /// let items_short = vec![
+    ///     Item::new("/home/tkadur/.dotfiles/file1", "/home/tkadur/.file1"),
+    ///     Item::new("/home/tkadur/.dotfiles/file2", "/home/tkadur/.file2"),
+    /// ];
+    ///
+    /// # let str_short_expected = [
+    /// #     "/home/tkadur/.dotfiles/file1  ->    /home/tkadur/.file1",
+    /// #     "/home/tkadur/.dotfiles/file2  ->    /home/tkadur/.file2"
+    /// # ].join("\n");
+    ///
+    /// // Produces the following:
+    /// //
+    /// // /home/tkadur/.dotfiles/file1  ->    /home/tkadur/.file1
+    /// // /home/tkadur/.dotfiles/file2  ->    /home/tkadur/.file2
+    /// let str_short = FormattedItems::from_items(items_short).to_string();
+    ///
+    /// # assert_eq!(
+    /// # str_short_expected,
+    /// #     str_short,
+    /// # );
+    ///
+    /// let items_long = vec![
+    ///     Item::new("/home/tkadur/.dotfiles/file1", "/home/tkadur/.file1"),
+    ///     Item::new("/home/tkadur/.dotfiles/file2", "/home/tkadur/.file2"),
+    ///     Item::new(
+    ///         "/home/tkadur/.dotfiles/file_long",
+    ///         "/home/tkadur/.file_long",
+    ///     ),
+    ///     Item::new(
+    ///         "/home/tkadur/.dotfiles/file_even_longer",
+    ///         "/home/tkadur/.file_even_longer",
+    ///     ),
+    /// ];
+    ///
+    /// // Produces the following:
+    /// //
+    /// // /home/tkadur/.dotfiles/file1             ->    /home/tkadur/.file1
+    /// // /home/tkadur/.dotfiles/file2             ->    /home/tkadur/.file2
+    /// // /home/tkadur/.dotfiles/file_long         ->    /home/tkadur/.file_long
+    /// // /home/tkadur/.dotfiles/file_even_longer  ->    /home/tkadur/.file_even_longer
+    /// let str_long = FormattedItems::from_items(items_long).to_string();
+    ///
+    /// # let str_long_expected = [
+    /// #     "/home/tkadur/.dotfiles/file1             ->    /home/tkadur/.file1",
+    /// #     "/home/tkadur/.dotfiles/file2             ->    /home/tkadur/.file2",
+    /// #     "/home/tkadur/.dotfiles/file_long         ->    /home/tkadur/.file_long",
+    /// #     "/home/tkadur/.dotfiles/file_even_longer  ->    /home/tkadur/.file_even_longer",
+    /// # ]
+    /// # .join("\n");
+    ///
+    /// # assert_eq!(
+    /// #     str_long_expected,
+    /// #     str_long,
+    /// # );
+    /// ```
     pub fn from_items(items: Vec<Item>) -> Self {
         let width = items
             .iter()
-            .map(|item| format!("{}", item.source()).len())
+            .map(|item| item.source().to_string().len())
             .max()
             .unwrap_or(0);
 
@@ -126,10 +193,6 @@ impl FormattedItems {
             .collect();
 
         FormattedItems { formatted_items }
-    }
-
-    pub fn items(&self) -> &[FormattedItem] {
-        &self.formatted_items
     }
 }
 
@@ -153,9 +216,6 @@ impl<'a> IntoIterator for &'a FormattedItems {
 
 impl Display for FormattedItems {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        self.formatted_items
-            .iter()
-            .map(|formatted_item| writeln!(f, "{}", formatted_item))
-            .collect()
+        write!(f, "{}", self.formatted_items.iter().join("\n"))
     }
 }

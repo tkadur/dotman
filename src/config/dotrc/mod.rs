@@ -57,6 +57,7 @@ pub fn get(dotrc_path: Option<impl AsRef<Path>>) -> Result<Config, Error> {
 pub enum Error {
     #[fail(display = "error parsing .dotrc ({})", _0)]
     ParseError(#[fail(cause)] serde_yaml::Error),
+
     #[fail(display = "error reading .dotrc ({})", _0)]
     IoError(#[fail(cause)] io::Error),
 }

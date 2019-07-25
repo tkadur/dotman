@@ -5,6 +5,14 @@ authors = ["Thejaswi Kadur <thejas.kadur@gmail.com>"]
 edition = "2018"
 description = "A tool for managing dotfiles"
 
+[lib]
+name = "lib"
+path = "src/lib.rs"
+
+[[bin]]
+name = "dotman"
+path = "src/bin.rs"
+
 [dependencies]
 # For safety, assume the semver policy of no stability before 1.0.0.
 # This is different than Cargo's defaults.
@@ -21,6 +29,7 @@ globset = "0.4.4"
 lazy_static = "^1.3.0"
 structopt = "0.2.18"
 failure = "0.1.5"
+itertools = "0.8.0"
 
 [dev-dependencies]
 tempfile = "^3.1.0"

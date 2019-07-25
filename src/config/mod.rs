@@ -352,8 +352,10 @@ pub fn get() -> Result<Config, Error> {
 pub enum Error {
     #[fail(display = "error reading system hostname")]
     NoSystemHostname,
+
     #[fail(display = "error reading file or directory ({})", _0)]
     WalkdirError(#[fail(cause)] walkdir::Error),
+
     #[fail(display = "{}", _0)]
     DotrcError(#[fail(cause)] dotrc::Error),
 }
