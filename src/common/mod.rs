@@ -19,7 +19,7 @@ pub struct AbsolutePath {
 
 impl Display for AbsolutePath {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{}", util::home_to_tilde(&self.path).display())
+        f.pad(&util::home_to_tilde(&self.path).display().to_string())
     }
 }
 
@@ -103,14 +103,12 @@ impl Deref for FormattedItem {
 
 impl Display for FormattedItem {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        println!("{:width$} asdf", self.source(), width = 100);
-        write!(
-            f,
+        f.pad(&format!(
             "{:width$}  ->    {}",
             self.source(),
             self.dest(),
             width = self.width
-        )
+        ))
     }
 }
 
@@ -216,6 +214,6 @@ impl<'a> IntoIterator for &'a FormattedItems {
 
 impl Display for FormattedItems {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{}", self.formatted_items.iter().join("\n"))
+        f.pad(&self.formatted_items.iter().join("\n"))
     }
 }

@@ -6,8 +6,7 @@ use structopt::StructOpt;
 // description of `dotman` in the help screen. So this has to be a regular
 // comment.
 //
-// The portion of the configuration read from CLI arguments and
-// environment variables
+// The portion of the configuration read from CLI arguments
 #[derive(Debug, Clone, StructOpt)]
 #[structopt(rename_all = "kebab-case")]
 pub struct Config {

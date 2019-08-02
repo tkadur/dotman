@@ -337,7 +337,7 @@ fn find_dotrc(partial_config: &PartialConfig) -> Option<AbsolutePath> {
     None
 }
 
-/// Loads the complete configuration.
+/// Loads the configuration.
 ///
 /// Draws from CLI arguments, the dotrc, and default values (where applicable)
 pub fn get() -> Result<Config, Error> {

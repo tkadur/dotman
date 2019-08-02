@@ -3,7 +3,7 @@ use crate::{
     verbose_println,
 };
 use derive_more::From;
-use failure::*;
+use failure::Fail;
 use std::{
     fs,
     io::{self, Write},
