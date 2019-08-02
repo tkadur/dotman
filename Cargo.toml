@@ -3,7 +3,9 @@ name = "dotman"
 version = "0.1.0"
 authors = ["Thejaswi Kadur <thejas.kadur@gmail.com>"]
 edition = "2018"
-description = "A tool for managing dotfiles"
+description = "Dotfile management tool"
+license = "MIT"
+repository = "https://github.com/tkadur/dotman"
 
 [lib]
 name = "lib"
