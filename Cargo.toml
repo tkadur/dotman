@@ -6,6 +6,7 @@ edition = "2018"
 description = "Dotfile management tool"
 license = "MIT"
 repository = "https://github.com/tkadur/dotman"
+readme = "README.md"
 
 [lib]
 name = "lib"
