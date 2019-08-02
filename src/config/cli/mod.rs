@@ -8,7 +8,7 @@ use structopt::StructOpt;
 //
 // The portion of the configuration read from CLI arguments
 #[derive(Debug, Clone, StructOpt)]
-#[structopt(rename_all = "kebab-case")]
+#[structopt(author = "", rename_all = "kebab-case")]
 pub struct Config {
     /// Enables verbose output.
     #[structopt(short, long)]
