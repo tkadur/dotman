@@ -98,7 +98,7 @@ impl PartialConfig {
             .into_iter()
             .flatten()
             // Wrap with `AbsolutePath`s
-            .map(|exclude| AbsolutePath::from(exclude.clone()))
+            .map(AbsolutePath::from)
             .collect();
 
         let tags = self.tags.clone();

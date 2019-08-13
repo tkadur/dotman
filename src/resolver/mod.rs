@@ -149,9 +149,9 @@ pub fn get(config: &Config) -> Result<Vec<Item>, Error> {
     // Check for duplicate destinations
     let mut seen = HashSet::new();
     for item in &res {
-        let dest = item.dest().clone();
-        if seen.contains(&dest) {
-            return Err(DuplicateFiles { dest });
+        let dest = item.dest();
+        if seen.contains(dest) {
+            return Err(DuplicateFiles { dest: dest.clone() });
         } else {
             seen.insert(dest);
         }
