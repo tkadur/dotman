@@ -4,5 +4,5 @@ mod common;
 
 #[test]
 fn test() {
-  let dir = common::setup();
+    let dir = common::setup();
 }
