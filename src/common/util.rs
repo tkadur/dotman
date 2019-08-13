@@ -5,6 +5,32 @@ use std::{
     path::{Path, PathBuf},
     sync::atomic::{AtomicBool, Ordering},
 };
+use crate::common::Platform;
+
+lazy_static! {
+    static ref PLATFORM: Platform = {
+        use Platform::*;
+
+        if cfg!(target_os = "linux") {
+            if wsl::is_wsl() {
+                Wsl
+            } else {
+                Linux
+            }
+        } else if cfg!(target_os = "macos") {
+            Macos
+        } else if cfg!(target_os = "windows") {
+            Windows
+        } else {
+            eprintln!("Error: this platform is not supported");
+            std::process::exit(1);
+        }
+    };
+}
+
+pub fn platform() -> Platform {
+    *PLATFORM
+}
 
 /// Efficiently appends two `Vec`s together
 pub fn append_vecs<T>(x: Vec<T>, mut y: Vec<T>) -> Vec<T> {

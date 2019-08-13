@@ -11,6 +11,14 @@ use std::{
     path::{Path, PathBuf},
 };
 
+#[derive(Debug, Clone, Copy)]
+pub enum Platform {
+    Windows,
+    Macos,
+    Linux,
+    Wsl,
+}
+
 /// Represents an (owned) path which must be absolute
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
 pub struct AbsolutePath {
