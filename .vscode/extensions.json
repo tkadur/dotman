@@ -8,6 +8,9 @@
 		"vadimcn.vscode-lldb",
 		"rust-lang.rust",
 		"redhat.vscode-yaml",
+		"davidanson.vscode-markdownlint",
+		"redhat.vscode-yaml",
+		"serayuzgur.crates",
 	],
 	// List of extensions recommended by VS Code that should not be recommended for users of this workspace.
 	"unwantedRecommendations": [
