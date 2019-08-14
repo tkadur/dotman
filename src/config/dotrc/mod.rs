@@ -16,6 +16,7 @@ pub struct Config {
     #[serde(rename = "dotfiles-path")]
     pub dotfiles_path: Option<String>,
     pub hostname: Option<String>,
+    pub platform: Option<String>,
 }
 
 /// Gets configuration options from the dotrc file.
@@ -147,6 +148,21 @@ mod tests {
 
         let expected = Config {
             hostname: Some(String::from("my-amazing-computer")),
+            ..Config::default()
+        };
+
+        assert_eq!(config, expected);
+    }
+
+    #[test]
+    fn platform() {
+        let contents = r#"
+            platform: macos
+        "#;
+        let config = mock_dotrc(contents);
+
+        let expected = Config {
+            platform: Some(String::from("macos")),
             ..Config::default()
         };
 

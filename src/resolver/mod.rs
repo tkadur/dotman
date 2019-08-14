@@ -108,7 +108,8 @@ fn find_items(
 pub fn get(config: &Config) -> Result<Vec<Item>, Error> {
     let hostname_prefix = "host-";
     let tag_prefix = "tag-";
-    let prefixes = [hostname_prefix, tag_prefix];
+    let platform_prefix = "platform-";
+    let prefixes = [hostname_prefix, tag_prefix, platform_prefix];
 
     // Checks if a path is prefixed by any element of `prefixes`
     // If the path cannot be read as a String, assume it isn't.
@@ -124,13 +125,23 @@ pub fn get(config: &Config) -> Result<Vec<Item>, Error> {
     };
 
     let hostname_dir = PathBuf::from([hostname_prefix, config.hostname()].concat());
+
+    let platform_dirs: Vec<PathBuf> = config
+        .platform()
+        .strs()
+        .iter()
+        .map(|platform| PathBuf::from([platform_prefix, platform].concat()))
+        .collect();
+
     let tag_dirs: Vec<PathBuf> = config
         .tags()
         .iter()
         .map(|tag| PathBuf::from([tag_prefix, tag].concat()))
         .collect();
+
     let active_prefixed_dirs: HashSet<&Path> = iter::once(&hostname_dir)
         .chain(tag_dirs.iter())
+        .chain(platform_dirs.iter())
         .map(|p| p.as_path())
         .collect();
 

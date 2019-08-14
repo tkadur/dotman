@@ -1,4 +1,4 @@
-use crate::common::util;
+use crate::common::{util, Platform};
 use std::path::PathBuf;
 use structopt::StructOpt;
 
@@ -29,10 +29,14 @@ pub struct Config {
     #[structopt(long, parse(from_os_str))]
     pub dotfiles_path: Option<PathBuf>,
 
-    /// The hostname to use. Only one hostname can be used. The default is the
-    /// system hostname.
+    /// The hostname to use. The default is the system hostname.
     #[structopt(long)]
     pub hostname: Option<String>,
+
+    /// The platform to use. The default is the actual platform.
+    /// Valid values are macos, windows, linux, and wsl.
+    #[structopt(long, parse(try_from_str))]
+    pub platform: Option<Platform>,
 
     #[structopt(subcommand)]
     pub command: Command,
@@ -47,7 +51,7 @@ impl Config {
     }
 }
 
-#[derive(Debug, Clone, StructOpt)]
+#[derive(Debug, Clone, Copy, StructOpt)]
 #[structopt(rename_all = "kebab-case")]
 pub enum Command {
     /// Lists the active dotfiles

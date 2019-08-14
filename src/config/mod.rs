@@ -2,7 +2,7 @@ pub mod cli;
 mod dotrc;
 
 use crate::{
-    common::{util, AbsolutePath},
+    common::{self, util, AbsolutePath, Platform},
     verbose_println,
 };
 use derive_getters::Getters;
@@ -15,6 +15,7 @@ use std::{
     collections::HashSet,
     ffi::OsStr,
     path::{Path, PathBuf},
+    str::FromStr,
 };
 use walkdir::WalkDir;
 
@@ -34,6 +35,7 @@ pub struct Config {
     tags: Vec<String>,
     dotfiles_path: AbsolutePath,
     hostname: String,
+    platform: Platform,
     command: cli::Command,
 }
 
@@ -52,6 +54,7 @@ struct PartialConfig {
     tags: Vec<String>,
     dotfiles_path: (PathBuf, PartialSource),
     hostname: (String, PartialSource),
+    platform: (Platform, PartialSource),
     command: cli::Command,
 }
 
@@ -61,15 +64,17 @@ impl PartialConfig {
 
         let tags = util::append_vecs(cli.tags, default.tags);
 
-        let dotfiles_path = match cli.dotfiles_path {
-            Some(dotfiles_path) => (dotfiles_path, PartialSource::Cli),
-            None => (default.dotfiles_path, PartialSource::Default),
-        };
-
-        let hostname = match cli.hostname {
-            Some(hostname) => (hostname, PartialSource::Cli),
-            None => (default.hostname, PartialSource::Default),
-        };
+        macro_rules! merge_with_source {
+            ($field: ident) => {
+                match cli.$field {
+                    Some($field) => ($field, PartialSource::Cli),
+                    None => (default.$field, PartialSource::Default),
+                }
+            };
+        }
+        let dotfiles_path = merge_with_source!(dotfiles_path);
+        let hostname = merge_with_source!(hostname);
+        let platform = merge_with_source!(platform);
 
         let command = cli.command;
 
@@ -78,6 +83,7 @@ impl PartialConfig {
             tags,
             dotfiles_path,
             hostname,
+            platform,
             command,
         }
     }
@@ -102,20 +108,16 @@ impl PartialConfig {
             .collect();
 
         let tags = self.tags.clone();
-
-        let hostname = {
-            let (hostname, _) = &self.hostname;
-
-            hostname.clone()
-        };
-
-        let command = self.command.clone();
+        let hostname = self.hostname.0.clone();
+        let platform = self.platform.0;
+        let command = self.command;
 
         Ok(Config {
             excludes,
             tags,
             dotfiles_path,
             hostname,
+            platform,
             command,
         })
     }
@@ -126,6 +128,7 @@ struct DefaultConfig {
     tags: Vec<String>,
     dotfiles_path: PathBuf,
     hostname: String,
+    platform: Platform,
 }
 
 impl DefaultConfig {
@@ -139,11 +142,14 @@ impl DefaultConfig {
 
         let hostname = gethostname().to_str().ok_or(NoSystemHostname)?.to_owned();
 
+        let platform = util::platform();
+
         Ok(DefaultConfig {
             excludes,
             tags,
             dotfiles_path,
             hostname,
+            platform,
         })
     }
 }
@@ -219,9 +225,10 @@ fn merge_dotrc(
     /// - dotrc
     /// - Default source
     fn merge_hierarchy<T>(partial: (T, PartialSource), dotrc: Option<T>) -> T {
-        match partial {
-            (x, PartialSource::Cli) => x,
-            (x, PartialSource::Default) => dotrc.unwrap_or(x),
+        match (partial, dotrc) {
+            ((x, PartialSource::Cli), _) => x,
+            (_, Some(x)) => x,
+            ((x, PartialSource::Default), None) => x,
         }
     }
 
@@ -239,17 +246,13 @@ fn merge_dotrc(
         )
     }
 
-    let dotfiles_path = {
-        let dotrc_dotfiles_path = dotrc_config
+    let dotfiles_path = AbsolutePath::from(merge_hierarchy(
+        partial_config.dotfiles_path,
+        dotrc_config
             .dotfiles_path
             .and_then(expand_tilde)
-            .map(PathBuf::from);
-
-        AbsolutePath::from(merge_hierarchy(
-            partial_config.dotfiles_path,
-            dotrc_dotfiles_path,
-        ))
-    };
+            .map(PathBuf::from),
+    ));
 
     let excludes = {
         let mut excludes: Vec<AbsolutePath> =
@@ -292,6 +295,12 @@ fn merge_dotrc(
 
     let hostname = merge_hierarchy(partial_config.hostname, dotrc_config.hostname);
 
+    let platform = match (partial_config.platform, dotrc_config.platform) {
+        ((platform, PartialSource::Cli), _) => platform,
+        (_, Some(platform)) => Platform::from_str(&platform)?,
+        ((platform, PartialSource::Default), None) => platform,
+    };
+
     let command = partial_config.command;
 
     Ok(Config {
@@ -299,6 +308,7 @@ fn merge_dotrc(
         tags,
         dotfiles_path,
         hostname,
+        platform,
         command,
     })
 }
@@ -358,5 +368,8 @@ pub enum Error {
 
     #[fail(display = "{}", _0)]
     DotrcError(#[fail(cause)] dotrc::Error),
+
+    #[fail(display = "{}", _0)]
+    InvalidPlatform(#[fail(cause)] common::PlatformParseError),
 }
 use self::Error::*;

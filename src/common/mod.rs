@@ -2,6 +2,7 @@ pub mod util;
 
 use contracts::*;
 use derive_getters::Getters;
+use failure::Fail;
 use itertools::Itertools;
 use std::{
     convert::{AsRef, From},
@@ -9,14 +10,52 @@ use std::{
     iter::IntoIterator,
     ops::Deref,
     path::{Path, PathBuf},
+    str::FromStr,
 };
+use strum::IntoEnumIterator;
+use strum_macros::EnumIter;
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, EnumIter)]
 pub enum Platform {
     Windows,
     Macos,
     Linux,
     Wsl,
+}
+use self::Platform::*;
+
+impl Platform {
+    /// Returns the valid strings corresponding to `self`
+    pub fn strs(&self) -> &[&'static str] {
+        match self {
+            Windows => &["win", "windows"],
+            Macos => &["mac", "macos"],
+            Linux => &["linux"],
+            Wsl => &["wsl"],
+        }
+    }
+}
+
+#[derive(Debug, Fail)]
+#[fail(display = "unsupported platform {}", input)]
+pub struct PlatformParseError {
+    input: String,
+}
+
+impl FromStr for Platform {
+    type Err = PlatformParseError;
+
+    fn from_str(s: &str) -> Result<Platform, Self::Err> {
+        let s = s.trim().to_lowercase();
+
+        for platform in Platform::iter() {
+            if platform.strs().contains(&s.as_str()) {
+                return Ok(platform);
+            }
+        }
+
+        Err(PlatformParseError { input: s })
+    }
 }
 
 /// Represents an (owned) path which must be absolute

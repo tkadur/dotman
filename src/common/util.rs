@@ -1,3 +1,4 @@
+use crate::common::Platform;
 use lazy_static::lazy_static;
 use std::{
     ffi::OsStr,
@@ -5,7 +6,6 @@ use std::{
     path::{Path, PathBuf},
     sync::atomic::{AtomicBool, Ordering},
 };
-use crate::common::Platform;
 
 lazy_static! {
     static ref PLATFORM: Platform = {
