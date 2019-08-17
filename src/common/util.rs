@@ -76,6 +76,7 @@ pub fn is_hidden(filename: &OsStr) -> bool {
         .unwrap_or(false)
 }
 
+#[derive(Debug, Clone, Copy)]
 pub enum FileType {
     File,
     Directory,

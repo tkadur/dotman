@@ -14,7 +14,7 @@ enum YN {
     Yes,
     No,
 }
-use self::YN::*;
+use YN::*;
 
 /// Prompts the user with `prompt` and asks for a yes/no answer.
 /// Will continue asking until input resembling yes/no is given.
@@ -55,12 +55,10 @@ fn link_item(item: &FormattedItem, dry_run: bool) -> Result<(), Error> {
     let link = |item: &FormattedItem| -> Result<(), Error> {
         verbose_println!("Linking {}", item);
 
-        if dry_run {
-            return Ok(());
+        if !dry_run {
+            fs::create_dir_all(dest.parent().unwrap_or(dest))?;
+            symlink(source, dest)?;
         }
-
-        fs::create_dir_all(dest.parent().unwrap_or(dest))?;
-        symlink(source, dest)?;
 
         Ok(())
     };
@@ -69,7 +67,7 @@ fn link_item(item: &FormattedItem, dry_run: bool) -> Result<(), Error> {
         link(item)?
     } else {
         match fs::read_link(dest) {
-            // If the file at `dest` is already a link to source, ignore it.
+            // If the file at `dest` is already a link to `source`, ignore it.
             Ok(ref target) if target.as_path() == source.as_path() => {
                 verbose_println!("Skipping identical {}", dest)
             },
@@ -121,4 +119,4 @@ pub enum Error {
     )]
     DirectoryOverwrite(AbsolutePath),
 }
-use self::Error::*;
+use Error::*;

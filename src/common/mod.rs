@@ -22,7 +22,7 @@ pub enum Platform {
     Linux,
     Wsl,
 }
-use self::Platform::*;
+use Platform::*;
 
 impl Platform {
     /// Returns the valid strings corresponding to `self`
@@ -37,7 +37,7 @@ impl Platform {
 }
 
 #[derive(Debug, Fail)]
-#[fail(display = "unsupported platform {}", input)]
+#[fail(display = "unsupported platform \"{}\"", input)]
 pub struct PlatformParseError {
     input: String,
 }
@@ -135,6 +135,7 @@ impl Item {
 ///
 /// This type is not meant to be constructed directly. Instead,
 /// use `FormattedItems::from_items`.
+#[derive(Debug)]
 pub struct FormattedItem {
     item: Item,
     width: usize,
@@ -160,6 +161,7 @@ impl Display for FormattedItem {
 }
 
 // Just a convenient wrapper for multiple `FormattedItem`s
+#[derive(Debug)]
 pub struct FormattedItems {
     formatted_items: Vec<FormattedItem>,
 }

@@ -117,7 +117,7 @@ pub fn get(config: &Config) -> Result<Vec<Item>, Error> {
         for prefix in &prefixes {
             match filename.to_str() {
                 Some(s) if s.starts_with(prefix) => return true,
-                _ => (),
+                _ => continue,
             }
         }
 
@@ -184,4 +184,4 @@ pub enum Error {
     #[fail(display = "error reading from dotfiles directory ({})", _0)]
     WalkdirError(#[fail(cause)] walkdir::Error),
 }
-use self::Error::*;
+use Error::*;

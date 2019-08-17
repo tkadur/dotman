@@ -61,7 +61,6 @@ struct PartialConfig {
 impl PartialConfig {
     fn merge(cli: cli::Config, default: DefaultConfig) -> Self {
         let excludes = util::append_vecs(cli.excludes, default.excludes);
-
         let tags = util::append_vecs(cli.tags, default.tags);
 
         macro_rules! merge_with_source {
@@ -103,8 +102,8 @@ impl PartialConfig {
             .collect::<Result<Vec<_>, _>>()?
             .into_iter()
             .flatten()
-            // Wrap with `AbsolutePath`s
-            .map(AbsolutePath::from)
+            // Make each exclude path absolute by prepending them with the dotfiles path
+            .map(|exclude| AbsolutePath::from(dotfiles_path.join(exclude)))
             .collect();
 
         let tags = self.tags.clone();
@@ -260,7 +259,7 @@ fn merge_dotrc(
             util::append_vecs(
                 partial_config.excludes,
                 // We need to handle the possibility of the dotrc not specifying any excludes,
-                // as well as converting from the raw String input to a PathBuf
+                // as well as converting from the raw `String` input to a `PathBuf`
                 dotrc_config
                     .excludes
                     .unwrap_or_else(|| vec![])
@@ -372,4 +371,4 @@ pub enum Error {
     #[fail(display = "{}", _0)]
     InvalidPlatform(#[fail(cause)] common::PlatformParseError),
 }
-use self::Error::*;
+use Error::*;
