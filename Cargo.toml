@@ -1,6 +1,6 @@
 [package]
 name = "dotman"
-version = "0.1.2"
+version = "0.2.0"
 authors = ["Thejaswi Kadur <thejas.kadur@gmail.com>"]
 edition = "2018"
 description = "Dotfile management tool"
@@ -21,7 +21,7 @@ path = "src/bin.rs"
 # This is different than Cargo's defaults.
 gethostname = "0.2.0"
 dirs = "^2.0.2"
-serde = { version = "^1.0.98", features = ["derive"] }
+serde = { version = "^1.0.99", features = ["derive"] }
 serde_yaml = "0.8.9"
 derive_more = "0.15.0"
 derive-getters = "0.0.8"
