@@ -20,7 +20,7 @@ cargo install dotman
 
 ### Command-line options
 
-```
+```text
 USAGE:
     dot [FLAGS] [OPTIONS] <SUBCOMMAND>
 
@@ -35,8 +35,9 @@ OPTIONS:
                                            addition to any excludes defined in your dotrc. Globs are accepted - just
                                            make sure to enclose them in single quotes to avoid your shell trying to
                                            expand them.
-        --hostname <hostname>              The hostname to use. Only one hostname can be used. The default is the system
-                                           hostname.
+        --hostname <hostname>              The hostname to use. The default is the system hostname.
+        --platform <platform>              The platform to use. The default is the actual platform. Valid values are
+                                           macos, windows, linux, and wsl.
     -t, --tag <tags>...                    Tags to enable. This is in addition to any tags enabled in your dotrc.
 
 SUBCOMMANDS:
