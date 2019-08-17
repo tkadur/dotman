@@ -4,6 +4,10 @@ rust:
   - beta
   - nightly
 cache: cargo
+os:
+  - windows
+  - linux
+  - osx
 matrix:
   allow_failures:
     - rust: nightly
