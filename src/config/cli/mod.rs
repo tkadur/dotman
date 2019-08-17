@@ -1,68 +1,110 @@
+mod internal;
+
 use crate::common::{util, Platform};
-use std::path::PathBuf;
+use std::{ffi::OsString, path::PathBuf};
 use structopt::StructOpt;
 
-// Any doc comment placed here will get used by `structopt` as a user-facing
-// description of `dotman` in the help screen. So this has to be a regular
-// comment.
-//
-// The portion of the configuration read from CLI arguments
-#[derive(Debug, Clone, StructOpt)]
-#[structopt(author = "", rename_all = "kebab-case")]
+/// The portion of the configuration read from CLI arguments
+#[derive(Debug, Clone)]
 pub struct Config {
     /// Enables verbose output.
-    #[structopt(short, long)]
     pub verbose: bool,
 
     /// Paths (relative to the dotfiles folder) of items to be excluded.
     /// This is in addition to any excludes defined in your dotrc.
     /// Globs are accepted - just make sure to enclose them in single quotes to
     /// avoid your shell trying to expand them.
-    #[structopt(short, long = "exclude", number_of_values = 1, parse(from_os_str))]
     pub excludes: Vec<PathBuf>,
 
     /// Tags to enable. This is in addition to any tags enabled in your dotrc.
-    #[structopt(short, long = "tag", number_of_values = 1)]
     pub tags: Vec<String>,
 
     /// The folder in which to search for dotfiles. The default is ~/.dotfiles.
-    #[structopt(long, parse(from_os_str))]
     pub dotfiles_path: Option<PathBuf>,
 
     /// The hostname to use. The default is the system hostname.
-    #[structopt(long)]
     pub hostname: Option<String>,
 
     /// The platform to use. The default is the actual platform.
     /// Valid values are macos, windows, linux, and wsl.
-    #[structopt(long, parse(try_from_str))]
     pub platform: Option<Platform>,
 
-    #[structopt(subcommand)]
     pub command: Command,
 }
 
 impl Config {
     pub fn get() -> Self {
-        let res = Self::from_args();
+        let app = internal::RawConfig::clap();
+        let raw_config = internal::RawConfig::from_clap(&app.get_matches());
+
+        let (command, command_options) = match raw_config.command {
+            internal::Command::Ls { options } => (Ls, options),
+            internal::Command::Link { dry_run, options } => (Link { dry_run }, options),
+        };
+
+        let verbose = raw_config.options.verbose || command_options.verbose;
+        let excludes = util::append_vecs(raw_config.options.excludes, command_options.excludes);
+        let tags = util::append_vecs(raw_config.options.tags, command_options.tags);
+
+        /// Given the name of an argument which should be unique, tries to get
+        /// it from either the main command or a subcommand. If it is
+        /// provided multiple times in a way that `clap` won't catch
+        /// (e.g. given once to the main command and again to a subcommand),
+        /// produces an appropriate `clap` error and exits.
+        macro_rules! get_unique_arg {
+            ($name: ident) => {
+                match (raw_config.options.$name, command_options.$name) {
+                    (None, None) => None,
+                    (Some($name), None) | (None, Some($name)) => Some($name),
+                    (Some(_), Some(_)) => {
+                        // We simply append an extra usage of --$name onto the existing args, then
+                        // try to parse them again. This should trigger an error about
+                        // $name appearing twice, which we display then exit.
+                        //
+                        // This should make this particular hack transparent to the user, since the
+                        // error is just like if `clap` had caught the error.
+
+                        let mut args: Vec<OsString> = std::env::args_os().collect();
+                        args.push(OsString::from(concat!("--", stringify!($name))));
+
+                        internal::RawConfig::from_iter_safe(args.iter())
+                            .expect_err("This argument should not allow duplicates")
+                            .exit()
+                    },
+                }
+            };
+        }
+
+        let dotfiles_path = get_unique_arg!(dotfiles_path);
+        let hostname = get_unique_arg!(hostname);
+        let platform = get_unique_arg!(platform);
+
+        let res = Config {
+            verbose,
+            excludes,
+            tags,
+            dotfiles_path,
+            hostname,
+            platform,
+            command,
+        };
+
         util::set_verbosity(res.verbose);
 
         res
     }
 }
 
-#[derive(Debug, Clone, Copy, StructOpt)]
-#[structopt(rename_all = "kebab-case")]
+#[derive(Debug, Clone, Copy)]
 pub enum Command {
     /// Lists the active dotfiles
     Ls,
 
     /// Links all active dotfiles
-    #[structopt(name = "link")]
     Link {
         /// Skips the actual linking step. Everything else (e.g. errors and
         /// prompts) remains unchanged.
-        #[structopt(long)]
         dry_run: bool,
     },
 }
+use Command::*;
