@@ -1,7 +1,7 @@
 mod internal;
 
 use crate::common::{util, Platform};
-use std::{ffi::OsString, path::PathBuf};
+use std::{ffi::OsString, iter, path::PathBuf};
 use structopt::StructOpt;
 
 /// The portion of the configuration read from CLI arguments
@@ -59,15 +59,15 @@ impl Config {
                     (Some(_), Some(_)) => {
                         // We simply append an extra usage of --$name onto the existing args, then
                         // try to parse them again. This should trigger an error about
-                        // $name appearing twice, which we display then exit.
+                        // $name appearing twice, which we display before exiting.
                         //
                         // This should make this particular hack transparent to the user, since the
                         // error is just like if `clap` had caught the error.
 
-                        let mut args: Vec<OsString> = std::env::args_os().collect();
-                        args.push(OsString::from(concat!("--", stringify!($name))));
+                        let args = std::env::args_os()
+                            .chain(iter::once(OsString::from(concat!("--", stringify!($name)))));
 
-                        internal::RawConfig::from_iter_safe(args.iter())
+                        internal::RawConfig::from_iter_safe(args)
                             .expect_err("This argument should not allow duplicates")
                             .exit()
                     },
