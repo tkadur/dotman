@@ -7,29 +7,50 @@ use std::{
     sync::atomic::{AtomicBool, Ordering},
 };
 
-lazy_static! {
-    static ref PLATFORM: Platform = {
-        use Platform::*;
+// lazy_static! {
+//     // static ref BASIC_PLATFORM: Platform = {
+//     //     use Platform::*;
 
-        if cfg!(target_os = "linux") {
-            if wsl::is_wsl() {
-                Wsl
-            } else {
-                Linux
-            }
-        } else if cfg!(target_os = "macos") {
-            Macos
-        } else if cfg!(target_os = "windows") {
-            Windows
-        } else {
-            eprintln!("Error: this platform is not supported");
-            std::process::exit(1);
-        }
-    };
+//     //     if cfg!(target_os = "linux") {
+//     //         if wsl::is_wsl() {
+//     //             Wsl
+//     //         } else {
+//     //             Linux
+//     //         }
+//     //     } else if cfg!(target_os = "macos") {
+//     //         Macos
+//     //     } else if cfg!(target_os = "windows") {
+//     //         Windows
+//     //     } else {
+//     //         eprintln!("Error: this platform is not supported");
+//     //         std::process::exit(1);
+//     //     }
+//     // };
+//     #[cfg(target_os = "macos")]
+//     static ref BASIC_PLATFORM: Platform = Macos;
+// }
+
+#[cfg(target_os = "macos")]
+const BASIC_PLATFORM: Platform = Platform::Macos;
+
+#[cfg(target_os = "linux")]
+const BASIC_PLATFORM: Platform = Platform::Linux;
+
+#[cfg(target_os = "windows")]
+const BASIC_PLATFORM: Platform = Platform::Windows;
+
+lazy_static! {
+    static ref WSL: bool = wsl::is_wsl();
 }
 
 pub fn platform() -> Platform {
-    *PLATFORM
+    use Platform::*;
+
+    if *WSL {
+        Wsl
+    } else {
+        BASIC_PLATFORM
+    }
 }
 
 /// Efficiently appends two `Vec`s together

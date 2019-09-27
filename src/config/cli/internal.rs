@@ -9,17 +9,17 @@ use structopt::StructOpt;
 // The portion of the configuration read from CLI arguments
 #[derive(Debug, Clone, StructOpt)]
 #[structopt(author = "", rename_all = "kebab-case")]
-pub struct RawConfig {
+pub(super) struct RawConfig {
     #[structopt(subcommand)]
-    pub command: Command,
+    pub(super) command: Command,
 
     #[structopt(flatten)]
-    pub options: Options,
+    pub(super) options: Options,
 }
 
 #[derive(Debug, Clone, StructOpt)]
 #[structopt(rename_all = "kebab-case")]
-pub enum Command {
+pub(super) enum Command {
     /// Lists the active dotfiles
     Ls {
         #[structopt(flatten)]
@@ -41,32 +41,32 @@ pub enum Command {
 
 #[derive(Debug, Clone, StructOpt)]
 #[structopt(rename_all = "kebab-case")]
-pub struct Options {
+pub(super) struct Options {
     /// Enables verbose output.
     #[structopt(short, long)]
-    pub verbose: bool,
+    pub(super) verbose: bool,
 
     /// Paths (relative to the dotfiles folder) of items to be excluded.
     /// This is in addition to any excludes defined in your dotrc.
     /// Globs are accepted - just make sure to enclose them in single quotes to
     /// avoid your shell trying to expand them.
     #[structopt(short, long = "exclude", number_of_values = 1, parse(from_os_str))]
-    pub excludes: Vec<PathBuf>,
+    pub(super) excludes: Vec<PathBuf>,
 
     /// Tags to enable. This is in addition to any tags enabled in your dotrc.
     #[structopt(short, long = "tag", number_of_values = 1)]
-    pub tags: Vec<String>,
+    pub(super) tags: Vec<String>,
 
     /// The folder in which to search for dotfiles. The default is ~/.dotfiles.
     #[structopt(long, parse(from_os_str))]
-    pub dotfiles_path: Option<PathBuf>,
+    pub(super) dotfiles_path: Option<PathBuf>,
 
     /// The hostname to use. The default is the system hostname.
     #[structopt(long)]
-    pub hostname: Option<String>,
+    pub(super) hostname: Option<String>,
 
     /// The platform to use. The default is the actual platform.
     /// Valid values are macos, windows, linux, and wsl.
     #[structopt(long, parse(try_from_str))]
-    pub platform: Option<Platform>,
+    pub(super) platform: Option<Platform>,
 }

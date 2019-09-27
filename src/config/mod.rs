@@ -88,11 +88,7 @@ impl PartialConfig {
     }
 
     fn to_config(&self) -> Result<Config, walkdir::Error> {
-        let dotfiles_path = {
-            let (dotfiles_path, _) = &self.dotfiles_path;
-
-            AbsolutePath::from(dotfiles_path.clone())
-        };
+        let dotfiles_path = AbsolutePath::from(self.dotfiles_path.0.clone());
 
         let excludes = self
             .excludes

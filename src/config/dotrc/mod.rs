@@ -10,13 +10,13 @@ use std::{
 /// Configuration options available in dotrc
 #[derive(Debug, Default, Deserialize, PartialEq, Eq)]
 #[serde(deny_unknown_fields)]
-pub struct Config {
-    pub excludes: Option<Vec<String>>,
-    pub tags: Option<Vec<String>>,
+pub(super) struct Config {
+    pub(super) excludes: Option<Vec<String>>,
+    pub(super) tags: Option<Vec<String>>,
     #[serde(rename = "dotfiles-path")]
-    pub dotfiles_path: Option<String>,
-    pub hostname: Option<String>,
-    pub platform: Option<String>,
+    pub(super) dotfiles_path: Option<String>,
+    pub(super) hostname: Option<String>,
+    pub(super) platform: Option<String>,
 }
 
 /// Gets configuration options from the dotrc file.
@@ -25,7 +25,7 @@ pub struct Config {
 /// and will return an empty config. Failure to read the dotrc
 /// file or a malformed dotrc, on the other hand, _is_ considered
 /// an error.
-pub fn get(dotrc_path: Option<impl AsRef<Path>>) -> Result<Config, Error> {
+pub(super) fn get(dotrc_path: Option<impl AsRef<Path>>) -> Result<Config, Error> {
     let path = match dotrc_path {
         Some(path) => path,
         None => return Ok(Config::default()),

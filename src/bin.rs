@@ -1,5 +1,3 @@
-#![warn(clippy::all)]
-
 use common::FormattedItems;
 use lib::*;
 
