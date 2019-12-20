@@ -16,6 +16,7 @@ jobs:
         os: [macos-latest, ubuntu-latest, windows-latest]
         toolchain: [stable, beta, nightly]
         build-mode: ["", --release]
+      fail-fast: false
 
     runs-on: ${{ matrix.os }}
 
