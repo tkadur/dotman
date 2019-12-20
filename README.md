@@ -1,7 +1,6 @@
 # dotman
 
 [![crates.io](https://img.shields.io/crates/v/dotman.svg)](https://crates.io/crates/dotman)
-[![Build Status](https://travis-ci.org/tkadur/dotman.svg?branch=master)](https://travis-ci.org/tkadur/dotman)
 
 `dotman` is a tool for managing your dotfiles.
 
