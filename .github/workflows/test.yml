@@ -13,7 +13,7 @@ jobs:
   build:
     strategy:
       matrix:
-        os: [macos-latest, ubuntu-latest, windows-latest]
+        os: [macos-latest, ubuntu-latest]
         toolchain: [stable, beta, nightly]
         build-mode: ["", --release]
       fail-fast: false
