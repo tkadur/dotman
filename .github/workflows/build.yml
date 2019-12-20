@@ -7,10 +7,22 @@ jobs:
     strategy:
       matrix:
         os: [macos-latest, ubuntu-latest, windows-latest]
+        toolchain: [stable, beta, nightly]
+        build-mode: ["", --release]
 
     runs-on: ${{ matrix.os }}
 
     steps:
     - uses: actions/checkout@v1
+
+    - name: Install latest ${{ matrix.toolchain }}
+      uses: actions-rs/toolchain@v1
+      with:
+        toolchain: ${{ matrix.toolchain }}
+        override: true
+
     - name: Build
-      run: cargo build --verbose
+      uses: actions-rs/cargo@v1
+      with:
+        command: build
+        args: --verbose ${{ matrix.build-mode }}
