@@ -22,9 +22,9 @@ path = "src/bin.rs"
 gethostname = "0.2.1"
 dirs = "^2.0.2"
 serde = { version = "^1.0.99", features = ["derive"] }
-serde_yaml = "0.8.9"
-derive_more = "0.15.0"
-derive-getters = "0.0.8"
+serde_yaml = "0.8.11"
+derive_more = "0.99.2"
+derive-getters = "0.1.0"
 clap = { version = "^2.33.0", features = ["yaml"] }
 contracts = { version = "0.3.0", features = ["override_debug"] }
 walkdir = "^2.2.9"
