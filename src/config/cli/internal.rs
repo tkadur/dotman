@@ -25,7 +25,6 @@ pub(super) enum Command {
     },
 
     /// Links all active dotfiles
-    #[structopt(name = "link")]
     Link {
         /// Skips the actual linking step. Everything else (e.g. errors and
         /// prompts) remains unchanged.
