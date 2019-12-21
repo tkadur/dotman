@@ -68,7 +68,7 @@ fn link_item(item: &FormattedItem, dry_run: bool) -> Result<(), Error> {
     } else {
         match fs::read_link(dest) {
             // If the file at `dest` is already a link to `source`, ignore it.
-            Ok(ref target) if target.as_path() == source.as_path() => {
+            Ok(target) if target.as_path() == source.as_path() => {
                 verbose_println!("Skipping identical {}", dest)
             },
             // If the file at `dest` is anything else, ask if it should be overwritten
