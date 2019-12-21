@@ -2,7 +2,7 @@ pub mod util;
 
 use contracts::*;
 use derive_getters::Getters;
-use derive_more::{Deref, AsRef};
+use derive_more::{AsRef, Deref};
 use failure::Fail;
 use itertools::Itertools;
 use std::{
