@@ -2,10 +2,11 @@ pub mod util;
 
 use contracts::*;
 use derive_getters::Getters;
+use derive_more::{Deref, AsRef};
 use failure::Fail;
 use itertools::Itertools;
 use std::{
-    convert::{AsRef, From},
+    convert::From,
     fmt::{self, Display},
     iter::IntoIterator,
     ops::Deref,
@@ -59,7 +60,8 @@ impl FromStr for Platform {
 }
 
 /// Represents an (owned) path which must be absolute
-#[derive(Clone, Debug, Eq, Hash, PartialEq)]
+#[derive(AsRef, Clone, Debug, Deref, Eq, Hash, PartialEq)]
+#[as_ref(forward)]
 pub struct AbsolutePath {
     path: PathBuf,
 }
@@ -96,20 +98,6 @@ impl From<&Path> for AbsolutePath {
 impl From<&str> for AbsolutePath {
     fn from(path: &str) -> Self {
         AbsolutePath::from(Path::new(path))
-    }
-}
-
-impl Deref for AbsolutePath {
-    type Target = PathBuf;
-
-    fn deref(&self) -> &Self::Target {
-        &self.path
-    }
-}
-
-impl AsRef<Path> for AbsolutePath {
-    fn as_ref(&self) -> &Path {
-        self.path.as_ref()
     }
 }
 
