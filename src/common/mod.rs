@@ -2,14 +2,12 @@ pub mod util;
 
 use contracts::*;
 use derive_getters::Getters;
-use derive_more::{AsRef, Deref};
+use derive_more::{AsRef, Deref, IntoIterator};
 use failure::Fail;
 use itertools::Itertools;
 use std::{
     convert::From,
     fmt::{self, Display},
-    iter::IntoIterator,
-    ops::Deref,
     path::{Path, PathBuf},
     str::FromStr,
 };
@@ -123,18 +121,11 @@ impl Item {
 ///
 /// This type is not meant to be constructed directly. Instead,
 /// use `FormattedItems::from_items`.
-#[derive(Debug)]
+#[derive(Debug, Deref)]
 pub struct FormattedItem {
+    #[deref]
     item: Item,
     width: usize,
-}
-
-impl Deref for FormattedItem {
-    type Target = Item;
-
-    fn deref(&self) -> &Self::Target {
-        &self.item
-    }
 }
 
 impl Display for FormattedItem {
@@ -149,8 +140,9 @@ impl Display for FormattedItem {
 }
 
 // Just a convenient wrapper for multiple `FormattedItem`s
-#[derive(Debug)]
+#[derive(Debug, IntoIterator)]
 pub struct FormattedItems {
+    #[into_iterator(owned, ref)]
     formatted_items: Vec<FormattedItem>,
 }
 
@@ -228,24 +220,6 @@ impl FormattedItems {
             .collect();
 
         FormattedItems { formatted_items }
-    }
-}
-
-impl IntoIterator for FormattedItems {
-    type IntoIter = <Vec<FormattedItem> as IntoIterator>::IntoIter;
-    type Item = <Vec<FormattedItem> as IntoIterator>::Item;
-
-    fn into_iter(self) -> Self::IntoIter {
-        self.formatted_items.into_iter()
-    }
-}
-
-impl<'a> IntoIterator for &'a FormattedItems {
-    type IntoIter = <&'a Vec<FormattedItem> as IntoIterator>::IntoIter;
-    type Item = <&'a Vec<FormattedItem> as IntoIterator>::Item;
-
-    fn into_iter(self) -> Self::IntoIter {
-        self.formatted_items.iter()
     }
 }
 
