@@ -7,29 +7,6 @@ use std::{
     sync::atomic::{AtomicBool, Ordering},
 };
 
-// lazy_static! {
-//     // static ref BASIC_PLATFORM: Platform = {
-//     //     use Platform::*;
-
-//     //     if cfg!(target_os = "linux") {
-//     //         if wsl::is_wsl() {
-//     //             Wsl
-//     //         } else {
-//     //             Linux
-//     //         }
-//     //     } else if cfg!(target_os = "macos") {
-//     //         Macos
-//     //     } else if cfg!(target_os = "windows") {
-//     //         Windows
-//     //     } else {
-//     //         eprintln!("Error: this platform is not supported");
-//     //         std::process::exit(1);
-//     //     }
-//     // };
-//     #[cfg(target_os = "macos")]
-//     static ref BASIC_PLATFORM: Platform = Macos;
-// }
-
 #[cfg(target_os = "macos")]
 const BASIC_PLATFORM: Platform = Platform::Macos;
 
@@ -79,13 +56,11 @@ pub fn home_dir() -> &'static Path {
 /// with a tilde for readability. If that fails for any reason, just
 /// return `path`.
 pub fn home_to_tilde(path: &Path) -> PathBuf {
-    let relative_path = match path.strip_prefix(home_dir()) {
-        Ok(relative_path) => relative_path,
+    match path.strip_prefix(home_dir()) {
+        Ok(relative_path) => PathBuf::from("~").join(relative_path),
         // The home directory isn't a prefix of `path` - just return `path` unchanged
         Err(_) => return PathBuf::from(path),
-    };
-
-    PathBuf::from("~").join(relative_path)
+    }
 }
 
 /// Checks if a filename is prefixed by a '.' character.
