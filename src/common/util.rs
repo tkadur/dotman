@@ -59,7 +59,7 @@ pub fn home_to_tilde(path: &Path) -> PathBuf {
     match path.strip_prefix(home_dir()) {
         Ok(relative_path) => PathBuf::from("~").join(relative_path),
         // The home directory isn't a prefix of `path` - just return `path` unchanged
-        Err(_) => return PathBuf::from(path),
+        Err(_) => PathBuf::from(path),
     }
 }
 
