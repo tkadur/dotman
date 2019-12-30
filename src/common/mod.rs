@@ -1,7 +1,6 @@
 pub mod util;
 
 use contracts::*;
-use derive_getters::Getters;
 use derive_more::{AsRef, Deref, IntoIterator};
 use failure::Fail;
 use itertools::Itertools;
@@ -102,10 +101,10 @@ impl From<&str> for AbsolutePath {
 /// Represents the location of a dotfile (the source) and the
 /// location of the symlink pointing to the source (the destination) as a pair
 /// of absolute paths to the two files.
-#[derive(Debug, Getters)]
+#[derive(Debug)]
 pub struct Item {
-    source: AbsolutePath,
-    dest: AbsolutePath,
+    pub source: AbsolutePath,
+    pub dest: AbsolutePath,
 }
 
 impl Item {
@@ -132,8 +131,8 @@ impl Display for FormattedItem {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.pad(&format!(
             "{:width$}  ->    {}",
-            self.source(),
-            self.dest(),
+            self.source,
+            self.dest,
             width = self.width
         ))
     }
@@ -210,7 +209,7 @@ impl FormattedItems {
     pub fn from_items(items: Vec<Item>) -> Self {
         let width = items
             .iter()
-            .map(|item| item.source().to_string().len())
+            .map(|item| item.source.to_string().len())
             .max()
             .unwrap_or(0);
 

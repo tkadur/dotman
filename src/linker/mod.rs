@@ -48,7 +48,7 @@ fn symlink(source: impl AsRef<Path>, dest: impl AsRef<Path>) -> io::Result<()> {
 }
 
 fn link_item(item: &FormattedItem, dry_run: bool) -> Result<(), Error> {
-    let (source, dest) = (item.source(), item.dest());
+    let (source, dest) = (&item.source, &item.dest);
 
     // Performs the actual linking after all validation
     // is finished.

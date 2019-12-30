@@ -338,10 +338,10 @@ fn find_dotrc(partial_config: &PartialConfig) -> Option<AbsolutePath> {
     // Try to check if a dotrc was among the files discovered from partial_config
     let items = crate::resolver::get_items(&config).ok()?;
     for item in items {
-        match item.dest().file_name() {
+        match item.dest.file_name() {
             Some(name) if DOTRC_NAMES.contains(&name) => {
-                verbose_println!("Discovered dotrc at {}", item.source());
-                return Some(item.source().clone());
+                verbose_println!("Discovered dotrc at {}", item.source);
+                return Some(item.source.clone());
             },
             _ => (),
         }
