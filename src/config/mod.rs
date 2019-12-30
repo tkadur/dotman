@@ -5,7 +5,6 @@ use crate::{
     common::{self, util, AbsolutePath, Platform},
     verbose_println,
 };
-use derive_getters::Getters;
 use derive_more::From;
 use failure::Fail;
 use gethostname::gethostname;
@@ -29,14 +28,14 @@ lazy_static! {
 }
 
 /// All dotman configuration options
-#[derive(Debug, Getters)]
+#[derive(Debug)]
 pub struct Config {
-    excludes: Vec<AbsolutePath>,
-    tags: Vec<String>,
-    dotfiles_path: AbsolutePath,
-    hostname: String,
-    platform: Platform,
-    command: cli::Command,
+    pub excludes: Vec<AbsolutePath>,
+    pub tags: Vec<String>,
+    pub dotfiles_path: AbsolutePath,
+    pub hostname: String,
+    pub platform: Platform,
+    pub command: cli::Command,
 }
 
 impl Config {

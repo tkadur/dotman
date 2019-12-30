@@ -124,17 +124,17 @@ pub fn get_items(config: &Config) -> Result<Vec<Item>, Error> {
         false
     };
 
-    let hostname_dir = PathBuf::from([hostname_prefix, config.hostname()].concat());
+    let hostname_dir = PathBuf::from([hostname_prefix, &config.hostname].concat());
 
     let platform_dirs: Vec<PathBuf> = config
-        .platform()
+        .platform
         .strs()
         .iter()
         .map(|platform| PathBuf::from([platform_prefix, platform].concat()))
         .collect();
 
     let tag_dirs: Vec<PathBuf> = config
-        .tags()
+        .tags
         .iter()
         .map(|tag| PathBuf::from([tag_prefix, tag].concat()))
         .collect();
@@ -145,12 +145,12 @@ pub fn get_items(config: &Config) -> Result<Vec<Item>, Error> {
         .map(|p| p.as_path())
         .collect();
 
-    let excludes = config.excludes().iter().collect();
+    let excludes = config.excludes.iter().collect();
 
     let mut res = vec![];
 
     find_items(
-        config.dotfiles_path().clone(),
+        config.dotfiles_path.clone(),
         &is_prefixed,
         &active_prefixed_dirs,
         &excludes,

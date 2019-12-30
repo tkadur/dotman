@@ -8,8 +8,8 @@ fn go() -> Result<(), failure::Error> {
     verbose_println!();
 
     use config::cli::Command;
-    match config.command() {
-        Command::Link { dry_run } => linker::link_items(items, *dry_run)?,
+    match config.command {
+        Command::Link { dry_run } => linker::link_items(items, dry_run)?,
         Command::Ls => println!("{}", items),
     }
 
