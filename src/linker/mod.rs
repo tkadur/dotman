@@ -47,8 +47,8 @@ fn symlink(source: impl AsRef<Path>, dest: impl AsRef<Path>) -> io::Result<()> {
     std::os::unix::fs::symlink(source, dest)
 }
 
-fn link_item(item: &FormattedItem, dry_run: bool) -> Result<(), Error> {
-    let (source, dest) = (&item.source, &item.dest);
+fn link_item(formatted_item: &FormattedItem, dry_run: bool) -> Result<(), Error> {
+    let (source, dest) = (&formatted_item.item().source, &formatted_item.item().dest);
 
     // Performs the actual linking after all validation
     // is finished.
@@ -64,7 +64,7 @@ fn link_item(item: &FormattedItem, dry_run: bool) -> Result<(), Error> {
     };
 
     if !dest.exists() {
-        link(item)?
+        link(formatted_item)?
     } else {
         match fs::read_link(dest) {
             // If the file at `dest` is already a link to `source`, ignore it.
@@ -90,7 +90,7 @@ fn link_item(item: &FormattedItem, dry_run: bool) -> Result<(), Error> {
                                 return Err(DirectoryOverwrite(dest.clone()))
                             },
                         };
-                        link(item)?;
+                        link(formatted_item)?;
                     },
                 }
             },

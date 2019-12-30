@@ -120,19 +120,25 @@ impl Item {
 ///
 /// This type is not meant to be constructed directly. Instead,
 /// use `FormattedItems::from_items`.
-#[derive(Debug, Deref)]
+#[derive(Debug)]
 pub struct FormattedItem {
-    #[deref]
     item: Item,
     width: usize,
+}
+
+impl FormattedItem {
+    /// Gets the underlying item
+    pub fn item(&self) -> &Item {
+        &self.item
+    }
 }
 
 impl Display for FormattedItem {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.pad(&format!(
             "{:width$}  ->    {}",
-            self.source,
-            self.dest,
+            self.item.source,
+            self.item.dest,
             width = self.width
         ))
     }
