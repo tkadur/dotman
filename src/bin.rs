@@ -2,9 +2,9 @@ use common::FormattedItems;
 use lib::*;
 
 fn go() -> Result<(), failure::Error> {
-    let config = config::get()?;
+    let config = config::Config::get()?;
     verbose_println!();
-    let items = FormattedItems::from_items(resolver::get(&config)?);
+    let items = FormattedItems::from_items(resolver::get_items(&config)?);
     verbose_println!();
 
     use config::cli::Command;

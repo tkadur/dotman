@@ -105,7 +105,7 @@ fn find_items(
     Ok(())
 }
 
-pub fn get(config: &Config) -> Result<Vec<Item>, Error> {
+pub fn get_items(config: &Config) -> Result<Vec<Item>, Error> {
     let hostname_prefix = "host-";
     let tag_prefix = "tag-";
     let platform_prefix = "platform-";

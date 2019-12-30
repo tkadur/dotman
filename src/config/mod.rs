@@ -39,6 +39,20 @@ pub struct Config {
     command: cli::Command,
 }
 
+impl Config {
+    /// Loads the configuration.
+    ///
+    /// Draws from CLI arguments, the dotrc, and default values (where
+    /// applicable)
+    pub fn get() -> Result<Self, Error> {
+        let partial_config = PartialConfig::merge(cli::Config::get(), DefaultConfig::get()?);
+        let dotrc_config = dotrc::Config::get(find_dotrc(&partial_config))?;
+        let config = merge_dotrc(partial_config, dotrc_config)?;
+
+        Ok(config)
+    }
+}
+
 #[derive(Debug)]
 enum PartialSource {
     Cli,
@@ -131,7 +145,7 @@ struct DefaultConfig {
 impl DefaultConfig {
     /// Gets a partial configuration corresponding to the "default"
     /// values/sources of each configuration option.
-    fn get() -> Result<DefaultConfig, Error> {
+    fn get() -> Result<Self, Error> {
         let excludes = vec![];
         let tags = vec![];
 
@@ -322,7 +336,7 @@ fn find_dotrc(partial_config: &PartialConfig) -> Option<AbsolutePath> {
     let config = partial_config.to_config().ok()?;
 
     // Try to check if a dotrc was among the files discovered from partial_config
-    let items = crate::resolver::get(&config).ok()?;
+    let items = crate::resolver::get_items(&config).ok()?;
     for item in items {
         match item.dest().file_name() {
             Some(name) if DOTRC_NAMES.contains(&name) => {
@@ -342,17 +356,6 @@ fn find_dotrc(partial_config: &PartialConfig) -> Option<AbsolutePath> {
     }
 
     None
-}
-
-/// Loads the configuration.
-///
-/// Draws from CLI arguments, the dotrc, and default values (where applicable)
-pub fn get() -> Result<Config, Error> {
-    let partial_config = PartialConfig::merge(cli::Config::get(), DefaultConfig::get()?);
-    let dotrc_config = dotrc::get(find_dotrc(&partial_config))?;
-    let config = merge_dotrc(partial_config, dotrc_config)?;
-
-    Ok(config)
 }
 
 #[derive(Fail, Debug, From)]
