@@ -7,6 +7,7 @@ use itertools::Itertools;
 use std::{
     convert::From,
     fmt::{self, Display},
+    io::{self, Write},
     path::{Path, PathBuf},
     str::FromStr,
 };
@@ -53,6 +54,42 @@ impl FromStr for Platform {
         }
 
         Err(PlatformParseError { input: s })
+    }
+}
+
+/// Represents a yes/no value
+#[derive(Clone, Copy, Debug)]
+pub enum YN {
+    Yes,
+    No,
+}
+use YN::*;
+
+impl YN {
+    /// Prompts the user with `prompt` and asks for a yes/no answer.
+    /// Will continue asking until input resembling yes/no is given.
+    pub fn read_from_cli(prompt: &str) -> io::Result<Self> {
+        let mut buf = String::new();
+        loop {
+            print!("{} (y/n) ", prompt);
+            io::stdout().flush()?;
+
+            io::stdin().read_line(&mut buf)?;
+            buf = buf.trim().to_lowercase();
+
+            if buf.is_empty() {
+                continue;
+            }
+
+            if buf.starts_with("yes") || "yes".starts_with(&buf) {
+                return Ok(Yes);
+            } else if buf.starts_with("no") || "no".starts_with(&buf) {
+                return Ok(No);
+            } else {
+                buf.clear();
+                continue;
+            }
+        }
     }
 }
 

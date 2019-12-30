@@ -158,14 +158,11 @@ pub fn get_items(config: &Config) -> Result<Vec<Item>, Error> {
     )?;
 
     // Check for duplicate destinations
-    let mut seen = HashSet::new();
-    for item in &res {
-        let dest = &item.dest;
-        if seen.contains(dest) {
-            return Err(DuplicateFiles { dest: dest.clone() });
-        } else {
-            seen.insert(dest);
-        }
+    let dests = res.iter().map(|item| &item.dest);
+    if let Some(duplicate_dest) = util::find_duplicate(dests) {
+        return Err(DuplicateFiles {
+            dest: duplicate_dest.clone(),
+        });
     }
 
     Ok(res)

@@ -1,7 +1,9 @@
 use crate::common::Platform;
 use lazy_static::lazy_static;
 use std::{
+    collections::HashSet,
     ffi::OsStr,
+    hash::Hash,
     io,
     path::{Path, PathBuf},
     sync::atomic::{AtomicBool, Ordering},
@@ -36,6 +38,28 @@ pub fn append_vecs<T>(x: Vec<T>, mut y: Vec<T>) -> Vec<T> {
     res.append(&mut y);
 
     res
+}
+
+/// Searches for an element of the iterator which appears more than once.
+///
+/// If no such element exists, `find_duplicate()` returns `None`.
+/// Otherwise, `find_duplicate()` returns `Some(element)`, where `element` is
+/// the first one which appears more than once.
+pub fn find_duplicate<I>(iter: I) -> Option<I::Item>
+where
+    I: IntoIterator,
+    I::Item: Clone + Eq + Hash,
+{
+    let mut seen = HashSet::new();
+    for x in iter {
+        if seen.contains(&x) {
+            return Some(x);
+        }
+
+        seen.insert(x);
+    }
+
+    None
 }
 
 lazy_static! {

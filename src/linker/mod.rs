@@ -1,46 +1,10 @@
 use crate::{
-    common::{util, AbsolutePath, FormattedItem, FormattedItems},
+    common::{util, AbsolutePath, FormattedItem, FormattedItems, YN},
     verbose_println,
 };
 use derive_more::From;
 use failure::Fail;
-use std::{
-    fs,
-    io::{self, Write},
-    path::Path,
-};
-
-enum YN {
-    Yes,
-    No,
-}
-use YN::*;
-
-/// Prompts the user with `prompt` and asks for a yes/no answer.
-/// Will continue asking until input resembling yes/no is given.
-fn read_yes_or_no(prompt: &str) -> io::Result<YN> {
-    let mut buf = String::new();
-    loop {
-        print!("{} (y/n) ", prompt);
-        io::stdout().flush()?;
-
-        io::stdin().read_line(&mut buf)?;
-        buf = buf.trim().to_lowercase();
-
-        if buf.is_empty() {
-            continue;
-        }
-
-        if buf.starts_with("yes") || "yes".starts_with(&buf) {
-            return Ok(Yes);
-        } else if buf.starts_with("no") || "no".starts_with(&buf) {
-            return Ok(No);
-        } else {
-            buf.clear();
-            continue;
-        }
-    }
-}
+use std::{fs, io, path::Path};
 
 #[cfg(unix)]
 fn symlink(source: impl AsRef<Path>, dest: impl AsRef<Path>) -> io::Result<()> {
@@ -74,9 +38,9 @@ fn link_item(formatted_item: &FormattedItem, dry_run: bool) -> Result<(), Error>
             // If the file at `dest` is anything else, ask if it should be overwritten
             _ => {
                 let prompt = format!("Overwrite {}?", dest);
-                match read_yes_or_no(&prompt)? {
-                    No => println!("Skipping {}", dest),
-                    Yes => {
+                match YN::read_from_cli(&prompt)? {
+                    YN::No => println!("Skipping {}", dest),
+                    YN::Yes => {
                         match util::file_type(dest)? {
                             util::FileType::File | util::FileType::Symlink => {
                                 fs::remove_file(dest)?
