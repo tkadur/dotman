@@ -63,8 +63,8 @@ impl PartialConfig {
         let excludes = util::append_vecs(cli.excludes, default.excludes);
         let tags = util::append_vecs(cli.tags, default.tags);
 
-        /// Gets `$field` from `cli` if possible and `default` otherwise, marking the value
-        /// with which source it came from.
+        /// Gets `$field` from `cli` if possible and `default` otherwise,
+        /// marking the value with which source it came from.
         macro_rules! merge_with_source {
             ($field: ident) => {
                 match cli.$field {
