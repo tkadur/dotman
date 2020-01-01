@@ -102,7 +102,7 @@ impl PartialConfig {
         }
     }
 
-    fn to_config(&self) -> Result<Config, walkdir::Error> {
+    fn to_config(&self) -> Result<Config, Error> {
         let dotfiles_path = AbsolutePath::from(self.dotfiles_path.0.clone());
 
         let excludes = self
@@ -167,13 +167,15 @@ impl DefaultConfig {
 /// Tries to glob-expand `path`.
 /// If `PathBuf` -> `String` conversion fails or the pattern is invalid,
 /// fall back to simply not trying to glob-expand
-fn expand_glob(path: &Path, dotfiles_path: &AbsolutePath) -> Result<Vec<PathBuf>, walkdir::Error> {
+fn expand_glob(path: &Path, dotfiles_path: &AbsolutePath) -> Result<Vec<PathBuf>, Error> {
     // Just to improve whitespace in verbose output about glob expansion
-    let mut had_glob_output = false;
-    let mut glob_output = || {
-        if !had_glob_output {
-            had_glob_output = true;
-            verbose_println!();
+    let mut glob_output = {
+        let mut had_glob_output = false;
+        move || {
+            if !had_glob_output {
+                had_glob_output = true;
+                verbose_println!();
+            }
         }
     };
 
@@ -208,7 +210,7 @@ fn expand_glob(path: &Path, dotfiles_path: &AbsolutePath) -> Result<Vec<PathBuf>
         .collect();
 
     // If an entry just got expanded to itself, don't print anything about it
-    match &expanded_paths.as_slice() {
+    match expanded_paths.as_slice() {
         [expanded_path] if expanded_path == path => (),
         _ => {
             glob_output();
@@ -242,26 +244,9 @@ fn merge_dotrc(
         }
     }
 
-    /// If `path` begins with a tilde, attempts to expand it into the
-    /// full home directory path. If `path` doesn't start with a tilde, just
-    /// successfully returns path. Fails if the home directory cannot
-    /// be read as a `String`.
-    fn expand_tilde(path: String) -> Option<String> {
-        Some(
-            if path.starts_with('~') {
-                path.replacen("~", util::home_dir().to_str()?, 1)
-            } else {
-                path
-            },
-        )
-    }
-
     let dotfiles_path = AbsolutePath::from(merge_hierarchy(
         partial_config.dotfiles_path,
-        dotrc_config
-            .dotfiles_path
-            .and_then(expand_tilde)
-            .map(PathBuf::from),
+        dotrc_config.dotfiles_path.map(util::tilde_to_home),
     ));
 
     let excludes = {

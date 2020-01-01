@@ -76,13 +76,25 @@ pub fn home_dir() -> &'static Path {
     HOME_DIR.as_path()
 }
 
-/// Tries to replace absolute paths of the home directory
-/// with a tilde for readability. If that fails for any reason, just
-/// return `path`.
-pub fn home_to_tilde(path: &Path) -> PathBuf {
+/// If `path` begins with the absolute path of the home directory, replaces it
+/// with a tilde. If `path` doesn't start with the absolute path of the home
+/// directory, just returns `path`.
+pub fn home_to_tilde(path: impl AsRef<Path>) -> PathBuf {
+    let path = path.as_ref();
     match path.strip_prefix(home_dir()) {
         Ok(relative_path) => PathBuf::from("~").join(relative_path),
         // The home directory isn't a prefix of `path` - just return `path` unchanged
+        Err(_) => PathBuf::from(path),
+    }
+}
+
+/// If `path` begins with a tilde, expands it into the full home directory path.
+/// If `path` doesn't start with a tilde, just returns `path`.
+pub fn tilde_to_home(path: impl AsRef<Path>) -> PathBuf {
+    let path = path.as_ref();
+    match path.strip_prefix("~") {
+        Ok(relative_path) => home_dir().join(relative_path),
+        // ~ isn't a prefix of `path` - just return `path` unchanged
         Err(_) => PathBuf::from(path),
     }
 }
