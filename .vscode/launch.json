@@ -1,45 +1,83 @@
 {
-  // Use IntelliSense to learn about possible attributes.
-  // Hover to view descriptions of existing attributes.
-  // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
-  "version": "0.2.0",
-  "configurations": [
-    {
-      "type": "lldb",
-      "request": "launch",
-      "name": "dotman ls",
-      "cargo": {
-        "args": [
-          "build",
-          "--bin=dotman",
-          "--package=dotman"
-        ],
-        "filter": {
-          "name": "dotman",
-          "kind": "bin"
+    // Use IntelliSense to learn about possible attributes.
+    // Hover to view descriptions of existing attributes.
+    // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "type": "lldb",
+            "request": "launch",
+            "name": "Debug unit tests in library 'lib'",
+            "cargo": {
+                "args": [
+                    "test",
+                    "--no-run",
+                    "--lib",
+                    "--package=dotman"
+                ],
+                "filter": {
+                    "name": "lib",
+                    "kind": "lib"
+                }
+            },
+            "args": [],
+            "cwd": "${workspaceFolder}"
+        },
+        {
+            "type": "lldb",
+            "request": "launch",
+            "name": "Debug executable 'dot'",
+            "cargo": {
+                "args": [
+                    "build",
+                    "--bin=dot",
+                    "--package=dotman"
+                ],
+                "filter": {
+                    "name": "dot",
+                    "kind": "bin"
+                }
+            },
+            "args": [],
+            "cwd": "${workspaceFolder}"
+        },
+        {
+            "type": "lldb",
+            "request": "launch",
+            "name": "Debug unit tests in executable 'dot'",
+            "cargo": {
+                "args": [
+                    "test",
+                    "--no-run",
+                    "--bin=dot",
+                    "--package=dotman"
+                ],
+                "filter": {
+                    "name": "dot",
+                    "kind": "bin"
+                }
+            },
+            "args": [],
+            "cwd": "${workspaceFolder}"
+        },
+        {
+            "type": "lldb",
+            "request": "launch",
+            "name": "Debug integration test 'test'",
+            "cargo": {
+                "args": [
+                    "test",
+                    "--no-run",
+                    "--test=test",
+                    "--package=dotman"
+                ],
+                "filter": {
+                    "name": "test",
+                    "kind": "test"
+                }
+            },
+            "args": [],
+            "cwd": "${workspaceFolder}"
         }
-      },
-      "args": ["ls"],
-      "cwd": "${workspaceFolder}"
-    },
-    {
-      "type": "lldb",
-      "request": "launch",
-      "name": "Debug unit tests in executable 'dotman'",
-      "cargo": {
-        "args": [
-          "test",
-          "--no-run",
-          "--bin=dotman",
-          "--package=dotman"
-        ],
-        "filter": {
-          "name": "dotman",
-          "kind": "bin"
-        }
-      },
-      "args": [],
-      "cwd": "${workspaceFolder}"
-    }
-  ]
+    ]
 }
