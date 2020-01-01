@@ -1,5 +1,8 @@
 use crate::{
-    common::{util, AbsolutePath, FormattedItem, FormattedItems, YN},
+    common::{
+        types::{AbsolutePath, FileType, FormattedItem, FormattedItems, YN},
+        util,
+    },
     verbose_println,
 };
 use derive_more::From;
@@ -42,17 +45,13 @@ fn link_item(formatted_item: &FormattedItem, dry_run: bool) -> Result<(), Error>
                     YN::No => println!("Skipping {}", dest),
                     YN::Yes => {
                         match util::file_type(dest)? {
-                            util::FileType::File | util::FileType::Symlink => {
-                                fs::remove_file(dest)?
-                            },
+                            FileType::File | FileType::Symlink => fs::remove_file(dest)?,
                             // To be careful, we don't want to overwrite directories. Especially
                             // since dotman currently only links files and not whole directories.
                             // To make sure the user _absolutely_ wants to overwrite a directory
                             // with a file symlink, we ask them to delete the directory manually
                             // before running dotman.
-                            util::FileType::Directory => {
-                                return Err(DirectoryOverwrite(dest.clone()))
-                            },
+                            FileType::Directory => return Err(DirectoryOverwrite(dest.clone())),
                         };
                         link(formatted_item)?;
                     },

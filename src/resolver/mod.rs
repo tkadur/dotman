@@ -1,5 +1,9 @@
 use crate::{
-    common::{util, AbsolutePath, Item},
+    common::{
+        types::{AbsolutePath, Item},
+        global,
+        util,
+    },
     config::Config,
     verbose_println,
 };
@@ -57,7 +61,7 @@ fn link_dir_contents(
                         .expect("dir must be a prefix of entry"),
                 };
 
-                AbsolutePath::from(util::home_dir().join(make_hidden(dest_tail)))
+                AbsolutePath::from(global::home_dir().join(make_hidden(dest_tail)))
             };
             let source = path;
 

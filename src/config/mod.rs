@@ -2,7 +2,11 @@ pub mod cli;
 mod dotrc;
 
 use crate::{
-    common::{self, util, AbsolutePath, Platform},
+    common::{
+        global,
+        types::{AbsolutePath, Platform, PlatformParseError},
+        util,
+    },
     verbose_println,
 };
 use derive_more::From;
@@ -148,11 +152,11 @@ impl DefaultConfig {
         let excludes = vec![];
         let tags = vec![];
 
-        let dotfiles_path = util::home_dir().join(DEFAULT_DOTFILES_DIR);
+        let dotfiles_path = global::home_dir().join(DEFAULT_DOTFILES_DIR);
 
         let hostname = gethostname().to_str().ok_or(NoSystemHostname)?.to_owned();
 
-        let platform = util::platform();
+        let platform = global::platform();
 
         Ok(DefaultConfig {
             excludes,
@@ -333,7 +337,7 @@ fn find_dotrc(partial_config: &PartialConfig) -> Option<AbsolutePath> {
 
     // Otherwise, try to find a dotrc in the home directory
     for dotrc_name in DOTRC_NAMES.iter() {
-        let dotrc_path = util::home_dir().join(dotrc_name);
+        let dotrc_path = global::home_dir().join(dotrc_name);
         if dotrc_path.exists() {
             return Some(AbsolutePath::from(dotrc_path));
         }
@@ -354,6 +358,6 @@ pub enum Error {
     DotrcError(#[fail(cause)] dotrc::Error),
 
     #[fail(display = "{}", _0)]
-    InvalidPlatform(#[fail(cause)] common::PlatformParseError),
+    InvalidPlatform(#[fail(cause)] PlatformParseError),
 }
 use Error::*;

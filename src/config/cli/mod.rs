@@ -1,6 +1,6 @@
 mod internal;
 
-use crate::common::{util, Platform};
+use crate::common::{global::set_verbosity, types::Platform, util};
 use std::{ffi::OsString, iter, path::PathBuf};
 use structopt::StructOpt;
 
@@ -91,7 +91,7 @@ impl Config {
             command,
         };
 
-        util::set_verbosity(res.verbose);
+        set_verbosity(res.verbose);
 
         res
     }

@@ -1,4 +1,4 @@
-use common::FormattedItems;
+use common::types::FormattedItems;
 use lib::*;
 
 fn go() -> Result<(), failure::Error> {

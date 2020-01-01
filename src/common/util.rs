@@ -1,35 +1,29 @@
-use crate::common::Platform;
-use lazy_static::lazy_static;
+use crate::common::{global::home_dir, types::FileType};
+
 use std::{
     collections::HashSet,
     ffi::OsStr,
     hash::Hash,
     io,
     path::{Path, PathBuf},
-    sync::atomic::{AtomicBool, Ordering},
 };
 
-#[cfg(target_os = "macos")]
-const BASIC_PLATFORM: Platform = Platform::Macos;
-
-#[cfg(target_os = "linux")]
-const BASIC_PLATFORM: Platform = Platform::Linux;
-
-#[cfg(target_os = "windows")]
-const BASIC_PLATFORM: Platform = Platform::Windows;
-
-lazy_static! {
-    static ref WSL: bool = wsl::is_wsl();
+#[macro_export]
+macro_rules! verbose_print {
+     ($($args:tt)*) => {
+         if crate::common::global::get_verbosity() {
+             print!($($args)*);
+         }
+     }
 }
 
-pub fn platform() -> Platform {
-    use Platform::*;
-
-    if *WSL {
-        Wsl
-    } else {
-        BASIC_PLATFORM
-    }
+#[macro_export]
+macro_rules! verbose_println {
+     ($($args:tt)*) => {
+         if crate::common::global::get_verbosity() {
+             println!($($args)*);
+         }
+     }
 }
 
 /// Efficiently appends two `Vec`s together
@@ -60,20 +54,6 @@ where
     }
 
     None
-}
-
-lazy_static! {
-    static ref HOME_DIR: PathBuf = match dirs::home_dir() {
-        Some(home_dir) => home_dir,
-        None => {
-            eprintln!("Error: couldn't find home directory");
-            std::process::exit(1);
-        },
-    };
-}
-
-pub fn home_dir() -> &'static Path {
-    HOME_DIR.as_path()
 }
 
 /// If `path` begins with the absolute path of the home directory, replaces it
@@ -108,52 +88,16 @@ pub fn is_hidden(filename: &OsStr) -> bool {
         .unwrap_or(false)
 }
 
-#[derive(Debug, Clone, Copy)]
-pub enum FileType {
-    File,
-    Directory,
-    Symlink,
-}
-use FileType::*;
-
 pub fn file_type(path: impl AsRef<Path>) -> io::Result<FileType> {
     let file_type = path.as_ref().symlink_metadata()?.file_type();
 
     Ok(if file_type.is_file() {
-        File
+        FileType::File
     } else if file_type.is_dir() {
-        Directory
+        FileType::Directory
     } else if file_type.is_symlink() {
-        Symlink
+        FileType::Symlink
     } else {
         unreachable!()
     })
-}
-
-static VERBOSE: AtomicBool = AtomicBool::new(false);
-
-pub fn set_verbosity(verbosity: bool) {
-    VERBOSE.store(verbosity, Ordering::SeqCst);
-}
-
-pub fn get_verbosity() -> bool {
-    VERBOSE.load(Ordering::SeqCst)
-}
-
-#[macro_export]
-macro_rules! verbose_print {
-     ($($args:tt)*) => {
-         if crate::common::util::get_verbosity() {
-             print!($($args)*);
-         }
-     }
-}
-
-#[macro_export]
-macro_rules! verbose_println {
-     ($($args:tt)*) => {
-         if crate::common::util::get_verbosity() {
-             println!($($args)*);
-         }
-     }
 }
