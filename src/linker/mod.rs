@@ -1,54 +1,18 @@
 use crate::{
-    common::{util, AbsolutePath, FormattedItem, FormattedItems},
+    common::{util, AbsolutePath, FormattedItem, FormattedItems, YN},
     verbose_println,
 };
 use derive_more::From;
 use failure::Fail;
-use std::{
-    fs,
-    io::{self, Write},
-    path::Path,
-};
-
-enum YN {
-    Yes,
-    No,
-}
-use YN::*;
-
-/// Prompts the user with `prompt` and asks for a yes/no answer.
-/// Will continue asking until input resembling yes/no is given.
-fn read_yes_or_no(prompt: &str) -> io::Result<YN> {
-    let mut buf = String::new();
-    loop {
-        print!("{} (y/n) ", prompt);
-        io::stdout().flush()?;
-
-        io::stdin().read_line(&mut buf)?;
-        buf = buf.trim().to_lowercase();
-
-        if buf.is_empty() {
-            continue;
-        }
-
-        if buf.starts_with("yes") || "yes".starts_with(&buf) {
-            return Ok(Yes);
-        } else if buf.starts_with("no") || "no".starts_with(&buf) {
-            return Ok(No);
-        } else {
-            buf.clear();
-            continue;
-        }
-    }
-}
+use std::{fs, io, path::Path};
 
 #[cfg(unix)]
 fn symlink(source: impl AsRef<Path>, dest: impl AsRef<Path>) -> io::Result<()> {
     std::os::unix::fs::symlink(source, dest)
 }
 
-fn link_item(item: &FormattedItem, dry_run: bool) -> Result<(), Error> {
-    let (source, dest) = (item.source(), item.dest());
+fn link_item(formatted_item: &FormattedItem, dry_run: bool) -> Result<(), Error> {
+    let (source, dest) = (&formatted_item.item().source, &formatted_item.item().dest);
 
     // Performs the actual linking after all validation
     // is finished.
@@ -64,19 +28,19 @@ fn link_item(item: &FormattedItem, dry_run: bool) -> Result<(), Error> {
     };
 
     if !dest.exists() {
-        link(item)?
+        link(formatted_item)?
     } else {
         match fs::read_link(dest) {
             // If the file at `dest` is already a link to `source`, ignore it.
-            Ok(ref target) if target.as_path() == source.as_path() => {
+            Ok(target) if target.as_path() == source.as_path() => {
                 verbose_println!("Skipping identical {}", dest)
             },
             // If the file at `dest` is anything else, ask if it should be overwritten
             _ => {
                 let prompt = format!("Overwrite {}?", dest);
-                match read_yes_or_no(&prompt)? {
-                    No => println!("Skipping {}", dest),
-                    Yes => {
+                match YN::read_from_cli(&prompt)? {
+                    YN::No => println!("Skipping {}", dest),
+                    YN::Yes => {
                         match util::file_type(dest)? {
                             util::FileType::File | util::FileType::Symlink => {
                                 fs::remove_file(dest)?
@@ -90,7 +54,7 @@ fn link_item(item: &FormattedItem, dry_run: bool) -> Result<(), Error> {
                                 return Err(DirectoryOverwrite(dest.clone()))
                             },
                         };
-                        link(item)?;
+                        link(formatted_item)?;
                     },
                 }
             },

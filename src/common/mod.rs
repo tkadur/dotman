@@ -1,14 +1,13 @@
 pub mod util;
 
 use contracts::*;
-use derive_getters::Getters;
+use derive_more::{AsRef, Deref, IntoIterator};
 use failure::Fail;
 use itertools::Itertools;
 use std::{
-    convert::{AsRef, From},
+    convert::From,
     fmt::{self, Display},
-    iter::IntoIterator,
-    ops::Deref,
+    io::{self, Write},
     path::{Path, PathBuf},
     str::FromStr,
 };
@@ -58,8 +57,45 @@ impl FromStr for Platform {
     }
 }
 
+/// Represents a yes/no value
+#[derive(Clone, Copy, Debug)]
+pub enum YN {
+    Yes,
+    No,
+}
+use YN::*;
+
+impl YN {
+    /// Prompts the user with `prompt` and asks for a yes/no answer.
+    /// Will continue asking until input resembling yes/no is given.
+    pub fn read_from_cli(prompt: &str) -> io::Result<Self> {
+        let mut buf = String::new();
+        loop {
+            print!("{} (y/n) ", prompt);
+            io::stdout().flush()?;
+
+            io::stdin().read_line(&mut buf)?;
+            buf = buf.trim().to_lowercase();
+
+            if buf.is_empty() {
+                continue;
+            }
+
+            if buf.starts_with("yes") || "yes".starts_with(&buf) {
+                return Ok(Yes);
+            } else if buf.starts_with("no") || "no".starts_with(&buf) {
+                return Ok(No);
+            } else {
+                buf.clear();
+                continue;
+            }
+        }
+    }
+}
+
 /// Represents an (owned) path which must be absolute
-#[derive(Clone, Debug, Eq, Hash, PartialEq)]
+#[derive(AsRef, Clone, Debug, Deref, Eq, Hash, PartialEq)]
+#[as_ref(forward)]
 pub struct AbsolutePath {
     path: PathBuf,
 }
@@ -99,27 +135,13 @@ impl From<&str> for AbsolutePath {
     }
 }
 
-impl Deref for AbsolutePath {
-    type Target = PathBuf;
-
-    fn deref(&self) -> &Self::Target {
-        &self.path
-    }
-}
-
-impl AsRef<Path> for AbsolutePath {
-    fn as_ref(&self) -> &Path {
-        self.path.as_ref()
-    }
-}
-
 /// Represents the location of a dotfile (the source) and the
 /// location of the symlink pointing to the source (the destination) as a pair
 /// of absolute paths to the two files.
-#[derive(Debug, Getters)]
+#[derive(Debug)]
 pub struct Item {
-    source: AbsolutePath,
-    dest: AbsolutePath,
+    pub source: AbsolutePath,
+    pub dest: AbsolutePath,
 }
 
 impl Item {
@@ -141,10 +163,9 @@ pub struct FormattedItem {
     width: usize,
 }
 
-impl Deref for FormattedItem {
-    type Target = Item;
-
-    fn deref(&self) -> &Self::Target {
+impl FormattedItem {
+    /// Gets the underlying item
+    pub fn item(&self) -> &Item {
         &self.item
     }
 }
@@ -153,16 +174,17 @@ impl Display for FormattedItem {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.pad(&format!(
             "{:width$}  ->    {}",
-            self.source(),
-            self.dest(),
+            self.item.source,
+            self.item.dest,
             width = self.width
         ))
     }
 }
 
 // Just a convenient wrapper for multiple `FormattedItem`s
-#[derive(Debug)]
+#[derive(Debug, IntoIterator)]
 pub struct FormattedItems {
+    #[into_iterator(owned, ref)]
     formatted_items: Vec<FormattedItem>,
 }
 
@@ -230,7 +252,7 @@ impl FormattedItems {
     pub fn from_items(items: Vec<Item>) -> Self {
         let width = items
             .iter()
-            .map(|item| item.source().to_string().len())
+            .map(|item| item.source.to_string().len())
             .max()
             .unwrap_or(0);
 
@@ -240,24 +262,6 @@ impl FormattedItems {
             .collect();
 
         FormattedItems { formatted_items }
-    }
-}
-
-impl IntoIterator for FormattedItems {
-    type IntoIter = <Vec<FormattedItem> as IntoIterator>::IntoIter;
-    type Item = <Vec<FormattedItem> as IntoIterator>::Item;
-
-    fn into_iter(self) -> Self::IntoIter {
-        self.formatted_items.into_iter()
-    }
-}
-
-impl<'a> IntoIterator for &'a FormattedItems {
-    type IntoIter = <&'a Vec<FormattedItem> as IntoIterator>::IntoIter;
-    type Item = <&'a Vec<FormattedItem> as IntoIterator>::Item;
-
-    fn into_iter(self) -> Self::IntoIter {
-        self.formatted_items.iter()
     }
 }
 
