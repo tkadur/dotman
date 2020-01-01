@@ -21,7 +21,6 @@ path = "src/bin.rs"
 # This is different than Cargo's defaults.
 clap = { version = "^2.33.0", features = ["yaml"] }
 contracts = { version = "0.3.0", features = ["override_debug"] }
-derive-getters = "0.1.0"
 derive_more = "0.99.2"
 dirs = "^2.0.2"
 failure = "0.1.6"
