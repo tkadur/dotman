@@ -1,29 +1,63 @@
 use crate::common::{global::home_dir, types::FileType};
 
+use lazy_static::lazy_static;
 use std::{
     collections::HashSet,
     ffi::OsStr,
     hash::Hash,
     io,
     path::{Path, PathBuf},
+    sync::Mutex,
 };
+
+lazy_static! {
+    pub static ref VERBOSE_PRINT_BUFFER: Mutex<Option<String>> = Mutex::new(Some(String::new()));
+}
 
 #[macro_export]
 macro_rules! verbose_print {
-     ($($args:tt)*) => {
-         if crate::common::global::get_verbosity() {
-             print!($($args)*);
-         }
-     }
+    ($($args:tt)*) => {
+        match $crate::common::global::get_verbosity() {
+            // If the verbosity has not yet been set, write the string to be printed into a buffer for storage
+            None => $crate::common::util::VERBOSE_PRINT_BUFFER
+                .lock()
+                .unwrap()
+                .as_mut()
+                .expect("Buffer should exist if verbosity hasn't been determined")
+                .push_str(&format!($($args)*)),
+            Some(verbosity) => {
+                let verbose_print = |s| {
+                    if verbosity {
+                        print!("{}", s)
+                    }
+                };
+
+                // Use and discard the buffer if this is the first invocation of `verbose_print!` since the verbosity was set
+                if let Some(buf) = $crate::common::util::VERBOSE_PRINT_BUFFER
+                    .lock()
+                    .unwrap()
+                    .take()
+                {
+                    verbose_print(format!("{}", buf))
+                }
+
+                verbose_print(format!($($args)*));
+            },
+        }
+    }
 }
 
 #[macro_export]
 macro_rules! verbose_println {
-     ($($args:tt)*) => {
-         if crate::common::global::get_verbosity() {
-             println!($($args)*);
-         }
-     }
+    () => {{
+        use $crate::verbose_print;
+        verbose_print!("\n");
+    }};
+    ($($args:tt)*) => {{
+        use $crate::verbose_print;
+        verbose_print!($($args)*);
+        verbose_print!("\n");
+    }}
 }
 
 /// Efficiently appends two `Vec`s together

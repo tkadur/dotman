@@ -1,7 +1,7 @@
 use crate::{
     common::{
-        types::{AbsolutePath, Item},
         global,
+        types::{AbsolutePath, Item},
         util,
     },
     config::Config,

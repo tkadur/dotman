@@ -3,6 +3,8 @@ use lib::*;
 
 fn go() -> Result<(), failure::Error> {
     let config = config::Config::get()?;
+    common::global::set_verbosity(config.verbosity);
+
     verbose_println!();
     let items = FormattedItems::from_items(resolver::get_items(&config)?);
     verbose_println!();

@@ -1,18 +1,16 @@
 use crate::common::types::Platform;
 use lazy_static::lazy_static;
-use std::{
-    path::{Path, PathBuf},
-    sync::atomic::{AtomicBool, Ordering},
-};
+use once_cell::sync::OnceCell;
+use std::path::{Path, PathBuf};
 
-static VERBOSE: AtomicBool = AtomicBool::new(false);
+static VERBOSITY: OnceCell<bool> = OnceCell::new();
 
 pub fn set_verbosity(verbosity: bool) {
-    VERBOSE.store(verbosity, Ordering::SeqCst);
+    VERBOSITY.set(verbosity).expect("Verbosity was set twice")
 }
 
-pub fn get_verbosity() -> bool {
-    VERBOSE.load(Ordering::SeqCst)
+pub fn get_verbosity() -> Option<bool> {
+    VERBOSITY.get().map(<bool as Clone>::clone)
 }
 
 lazy_static! {

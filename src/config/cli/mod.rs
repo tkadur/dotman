@@ -1,6 +1,6 @@
 mod internal;
 
-use crate::common::{global::set_verbosity, types::Platform, util};
+use crate::common::{types::Platform, util};
 use std::{ffi::OsString, iter, path::PathBuf};
 use structopt::StructOpt;
 
@@ -52,7 +52,7 @@ impl Config {
         /// (e.g. given once to the main command and again to a subcommand),
         /// produces an appropriate `clap` error and exits.
         macro_rules! get_unique_arg {
-            ($name: ident) => {
+            ($name:ident) => {
                 match (raw_config.options.$name, command_options.$name) {
                     (None, None) => None,
                     (Some($name), None) | (None, Some($name)) => Some($name),
@@ -90,8 +90,6 @@ impl Config {
             platform,
             command,
         };
-
-        set_verbosity(res.verbose);
 
         res
     }

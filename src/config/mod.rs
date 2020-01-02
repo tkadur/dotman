@@ -40,6 +40,7 @@ pub struct Config {
     pub hostname: String,
     pub platform: Platform,
     pub command: cli::Command,
+    pub verbosity: bool,
 }
 
 impl Config {
@@ -73,6 +74,7 @@ struct PartialConfig {
     hostname: (String, PartialSource),
     platform: (Platform, PartialSource),
     command: cli::Command,
+    verbosity: bool,
 }
 
 impl PartialConfig {
@@ -83,7 +85,7 @@ impl PartialConfig {
         /// Gets `$field` from `cli` if possible and `default` otherwise,
         /// marking the value with which source it came from.
         macro_rules! merge_with_source {
-            ($field: ident) => {
+            ($field:ident) => {
                 match cli.$field {
                     Some($field) => ($field, PartialSource::Cli),
                     None => (default.$field, PartialSource::Default),
@@ -96,6 +98,8 @@ impl PartialConfig {
 
         let command = cli.command;
 
+        let verbosity = cli.verbose || default.verbose;
+
         PartialConfig {
             excludes,
             tags,
@@ -103,6 +107,7 @@ impl PartialConfig {
             hostname,
             platform,
             command,
+            verbosity,
         }
     }
 
@@ -125,6 +130,7 @@ impl PartialConfig {
         let hostname = self.hostname.0.clone();
         let platform = self.platform.0;
         let command = self.command;
+        let verbosity = self.verbosity;
 
         Ok(Config {
             excludes,
@@ -133,6 +139,7 @@ impl PartialConfig {
             hostname,
             platform,
             command,
+            verbosity,
         })
     }
 }
@@ -143,6 +150,7 @@ struct DefaultConfig {
     dotfiles_path: PathBuf,
     hostname: String,
     platform: Platform,
+    verbose: bool,
 }
 
 impl DefaultConfig {
@@ -158,12 +166,15 @@ impl DefaultConfig {
 
         let platform = global::platform();
 
+        let verbose = false;
+
         Ok(DefaultConfig {
             excludes,
             tags,
             dotfiles_path,
             hostname,
             platform,
+            verbose,
         })
     }
 }
@@ -302,6 +313,8 @@ fn merge_dotrc(
 
     let command = partial_config.command;
 
+    let verbosity = partial_config.verbosity;
+
     Ok(Config {
         excludes,
         tags,
@@ -309,6 +322,7 @@ fn merge_dotrc(
         hostname,
         platform,
         command,
+        verbosity,
     })
 }
 
