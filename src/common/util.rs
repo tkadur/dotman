@@ -1,13 +1,13 @@
 use crate::common::{global::home_dir, types::FileType};
 
 use lazy_static::lazy_static;
+use parking_lot::Mutex;
 use std::{
     collections::HashSet,
     ffi::OsStr,
     hash::Hash,
     io,
     path::{Path, PathBuf},
-    sync::Mutex,
 };
 
 lazy_static! {
@@ -21,7 +21,6 @@ macro_rules! verbose_print {
             // If the verbosity has not yet been set, write the string to be printed into a buffer for storage
             None => $crate::common::util::VERBOSE_PRINT_BUFFER
                 .lock()
-                .unwrap()
                 .as_mut()
                 .expect("Buffer should exist if verbosity hasn't been determined")
                 .push_str(&format!($($args)*)),
@@ -33,11 +32,7 @@ macro_rules! verbose_print {
                 };
 
                 // Use and discard the buffer if this is the first invocation of `verbose_print!` since the verbosity was set
-                if let Some(buf) = $crate::common::util::VERBOSE_PRINT_BUFFER
-                    .lock()
-                    .unwrap()
-                    .take()
-                {
+                if let Some(buf) = $crate::common::util::VERBOSE_PRINT_BUFFER .lock() .take() {
                     verbose_print(format!("{}", buf))
                 }
 
