@@ -7,11 +7,16 @@ use crate::{
 };
 use derive_more::From;
 use failure::Fail;
-use std::{fs, io, path::Path};
+use std::{fs, io, os, path::Path};
 
 #[cfg(unix)]
 fn symlink(source: impl AsRef<Path>, dest: impl AsRef<Path>) -> io::Result<()> {
-    std::os::unix::fs::symlink(source, dest)
+    os::unix::fs::symlink(source, dest)
+}
+
+#[cfg(windows)]
+fn symlink(source: impl AsRef<Path>, dest: impl AsRef<Path>) -> io::Result<()> {
+    os::windows::fs::symlink_file(source, dest)
 }
 
 fn link_item(formatted_item: &FormattedItem, dry_run: bool) -> Result<(), Error> {
