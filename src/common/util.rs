@@ -32,7 +32,7 @@ macro_rules! verbose_print {
                 };
 
                 // Use and discard the buffer if this is the first invocation of `verbose_print!` since the verbosity was set
-                if let Some(buf) = $crate::common::util::VERBOSE_PRINT_BUFFER .lock() .take() {
+                if let Some(buf) = $crate::common::util::VERBOSE_PRINT_BUFFER.lock().take() {
                     verbose_print(format!("{}", buf))
                 }
 
