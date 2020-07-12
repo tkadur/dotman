@@ -15,6 +15,10 @@ use std::{
 use strum::IntoEnumIterator;
 use strum_macros::EnumIter;
 
+/// The platforms that `dotman` distinguishes between.
+///
+/// Note that `Linux` and `Wsl` are distinct - WSL platforms
+/// are not considred Linux by `dotman`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, EnumIter)]
 pub enum Platform {
     Windows,
@@ -134,7 +138,8 @@ impl Item {
 /// Just a wrapper for pretty-printing `Item`s
 ///
 /// This type is not meant to be constructed directly. Instead,
-/// use `FormattedItems::from_items`.
+/// use `FormattedItems::from_items` to construct a collection of
+/// `FormattedItem`s.
 #[derive(Debug)]
 pub struct FormattedItem {
     item: Item,
@@ -160,16 +165,17 @@ impl Display for FormattedItem {
     }
 }
 
-// Just a convenient wrapper for multiple `FormattedItem`s
+/// Allows for formatting multiple items in a group to ensure uniform
+/// formatting.
 #[derive(Debug)]
 pub struct FormattedItems {
     formatted_items: Vec<FormattedItem>,
 }
 
 impl FormattedItems {
-    /// Formats items in a group to ensure uniform formatting.
+    /// Create `FormattedItems` from a collection of `Item`s.
     ///
-    /// For example:
+    /// # Examples
     /// ```
     /// # use crate::lib::common::{Item, FormattedItems};
     /// let items_short = vec![

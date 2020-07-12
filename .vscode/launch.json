@@ -4,22 +4,23 @@
   // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
   "version": "0.2.0",
   "configurations": [
+
     {
       "type": "lldb",
       "request": "launch",
-      "name": "dotman ls",
+      "name": "dot",
       "cargo": {
         "args": [
           "build",
-          "--bin=dotman",
-          "--package=dotman"
+          // "--bin=dot",
+          // "--package=dotman"
         ],
         "filter": {
-          "name": "dotman",
+          "name": "dot",
           "kind": "bin"
         }
       },
-      "args": ["ls"],
+      "args": ["-v", "-e", "tag-python", "--platform", "linux", "link", "--dry-run", "-e", "tag-bash"],
       "cwd": "${workspaceFolder}"
     },
     {

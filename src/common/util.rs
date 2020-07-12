@@ -129,6 +129,7 @@ pub fn get_verbosity() -> bool {
     VERBOSE.load(Ordering::SeqCst)
 }
 
+/// Print if the verbose flag has been set.
 #[macro_export]
 macro_rules! verbose_print {
      ($($args:tt)*) => {
@@ -138,6 +139,7 @@ macro_rules! verbose_print {
      }
 }
 
+/// Print (with a newline) if the verbose flag has been set.
 #[macro_export]
 macro_rules! verbose_println {
      ($($args:tt)*) => {
