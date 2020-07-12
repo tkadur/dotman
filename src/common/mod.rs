@@ -188,7 +188,7 @@ impl Display for FormattedItem {
 
 /// Allows for formatting multiple items in a group to ensure uniform
 /// formatting.
-#[derive(Debug)]
+#[derive(Debug, IntoIterator)]
 pub struct FormattedItems {
     #[into_iterator(owned, ref)]
     formatted_items: Vec<FormattedItem>,

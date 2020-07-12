@@ -258,7 +258,7 @@ fn merge_dotrc(
                 // as well as converting from the raw `String` input to a `PathBuf`
                 dotrc_config
                     .excludes
-                    .unwrap_or_else(|| vec![])
+                    .unwrap_or_default()
                     .iter()
                     .map(PathBuf::from)
                     .collect(),
@@ -283,10 +283,7 @@ fn merge_dotrc(
         excludes
     };
 
-    let tags = util::append_vecs(
-        partial_config.tags,
-        dotrc_config.tags.unwrap_or_else(|| vec![]),
-    );
+    let tags = util::append_vecs(partial_config.tags, dotrc_config.tags.unwrap_or_default());
 
     let hostname = merge_hierarchy(partial_config.hostname, dotrc_config.hostname);
 
