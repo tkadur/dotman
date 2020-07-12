@@ -1,34 +1,13 @@
 use crate::common::Platform;
 use lazy_static::lazy_static;
 use std::{
+    collections::HashSet,
     ffi::OsStr,
+    hash::Hash,
     io,
     path::{Path, PathBuf},
     sync::atomic::{AtomicBool, Ordering},
 };
-
-// lazy_static! {
-//     // static ref BASIC_PLATFORM: Platform = {
-//     //     use Platform::*;
-
-//     //     if cfg!(target_os = "linux") {
-//     //         if wsl::is_wsl() {
-//     //             Wsl
-//     //         } else {
-//     //             Linux
-//     //         }
-//     //     } else if cfg!(target_os = "macos") {
-//     //         Macos
-//     //     } else if cfg!(target_os = "windows") {
-//     //         Windows
-//     //     } else {
-//     //         eprintln!("Error: this platform is not supported");
-//     //         std::process::exit(1);
-//     //     }
-//     // };
-//     #[cfg(target_os = "macos")]
-//     static ref BASIC_PLATFORM: Platform = Macos;
-// }
 
 #[cfg(target_os = "macos")]
 const BASIC_PLATFORM: Platform = Platform::Macos;
@@ -61,6 +40,28 @@ pub fn append_vecs<T>(x: Vec<T>, mut y: Vec<T>) -> Vec<T> {
     res
 }
 
+/// Searches for an element of the iterator which appears more than once.
+///
+/// If no such element exists, `find_duplicate()` returns `None`.
+/// Otherwise, `find_duplicate()` returns `Some(element)`, where `element` is
+/// the first one which appears more than once.
+pub fn find_duplicate<I>(iter: I) -> Option<I::Item>
+where
+    I: IntoIterator,
+    I::Item: Clone + Eq + Hash,
+{
+    let mut seen = HashSet::new();
+    for x in iter {
+        if seen.contains(&x) {
+            return Some(x);
+        }
+
+        seen.insert(x);
+    }
+
+    None
+}
+
 lazy_static! {
     static ref HOME_DIR: PathBuf = match dirs::home_dir() {
         Some(home_dir) => home_dir,
@@ -75,17 +76,27 @@ pub fn home_dir() -> &'static Path {
     HOME_DIR.as_path()
 }
 
-/// Tries to replace absolute paths of the home directory
-/// with a tilde for readability. If that fails for any reason, just
-/// return `path`.
-pub fn home_to_tilde(path: &Path) -> PathBuf {
-    let relative_path = match path.strip_prefix(home_dir()) {
-        Ok(relative_path) => relative_path,
+/// If `path` begins with the absolute path of the home directory, replaces it
+/// with a tilde. If `path` doesn't start with the absolute path of the home
+/// directory, just returns `path`.
+pub fn home_to_tilde(path: impl AsRef<Path>) -> PathBuf {
+    let path = path.as_ref();
+    match path.strip_prefix(home_dir()) {
+        Ok(relative_path) => PathBuf::from("~").join(relative_path),
         // The home directory isn't a prefix of `path` - just return `path` unchanged
-        Err(_) => return PathBuf::from(path),
-    };
+        Err(_) => PathBuf::from(path),
+    }
+}
 
-    PathBuf::from("~").join(relative_path)
+/// If `path` begins with a tilde, expands it into the full home directory path.
+/// If `path` doesn't start with a tilde, just returns `path`.
+pub fn tilde_to_home(path: impl AsRef<Path>) -> PathBuf {
+    let path = path.as_ref();
+    match path.strip_prefix("~") {
+        Ok(relative_path) => home_dir().join(relative_path),
+        // ~ isn't a prefix of `path` - just return `path` unchanged
+        Err(_) => PathBuf::from(path),
+    }
 }
 
 /// Checks if a filename is prefixed by a '.' character.

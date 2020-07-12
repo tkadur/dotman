@@ -5,7 +5,6 @@ use crate::{
     common::{self, util, AbsolutePath, Platform},
     verbose_println,
 };
-use derive_getters::Getters;
 use derive_more::From;
 use failure::Fail;
 use gethostname::gethostname;
@@ -29,14 +28,28 @@ lazy_static! {
 }
 
 /// All dotman configuration options
-#[derive(Debug, Getters)]
+#[derive(Debug)]
 pub struct Config {
-    excludes: Vec<AbsolutePath>,
-    tags: Vec<String>,
-    dotfiles_path: AbsolutePath,
-    hostname: String,
-    platform: Platform,
-    command: cli::Command,
+    pub excludes: Vec<AbsolutePath>,
+    pub tags: Vec<String>,
+    pub dotfiles_path: AbsolutePath,
+    pub hostname: String,
+    pub platform: Platform,
+    pub command: cli::Command,
+}
+
+impl Config {
+    /// Loads the configuration.
+    ///
+    /// Draws from CLI arguments, the dotrc, and default values (where
+    /// applicable)
+    pub fn get() -> Result<Self, Error> {
+        let partial_config = PartialConfig::merge(cli::Config::get(), DefaultConfig::get()?);
+        let dotrc_config = dotrc::Config::get(find_dotrc(&partial_config))?;
+        let config = merge_dotrc(partial_config, dotrc_config)?;
+
+        Ok(config)
+    }
 }
 
 #[derive(Debug)]
@@ -63,6 +76,8 @@ impl PartialConfig {
         let excludes = util::append_vecs(cli.excludes, default.excludes);
         let tags = util::append_vecs(cli.tags, default.tags);
 
+        /// Gets `$field` from `cli` if possible and `default` otherwise,
+        /// marking the value with which source it came from.
         macro_rules! merge_with_source {
             ($field: ident) => {
                 match cli.$field {
@@ -87,7 +102,7 @@ impl PartialConfig {
         }
     }
 
-    fn to_config(&self) -> Result<Config, walkdir::Error> {
+    fn to_config(&self) -> Result<Config, Error> {
         let dotfiles_path = AbsolutePath::from(self.dotfiles_path.0.clone());
 
         let excludes = self
@@ -129,7 +144,7 @@ struct DefaultConfig {
 impl DefaultConfig {
     /// Gets a partial configuration corresponding to the "default"
     /// values/sources of each configuration option.
-    fn get() -> Result<DefaultConfig, Error> {
+    fn get() -> Result<Self, Error> {
         let excludes = vec![];
         let tags = vec![];
 
@@ -152,13 +167,15 @@ impl DefaultConfig {
 /// Tries to glob-expand `path`.
 /// If `PathBuf` -> `String` conversion fails or the pattern is invalid,
 /// fall back to simply not trying to glob-expand
-fn expand_glob(path: &Path, dotfiles_path: &AbsolutePath) -> Result<Vec<PathBuf>, walkdir::Error> {
+fn expand_glob(path: &Path, dotfiles_path: &AbsolutePath) -> Result<Vec<PathBuf>, Error> {
     // Just to improve whitespace in verbose output about glob expansion
-    let mut had_glob_output = false;
-    let mut glob_output = || {
-        if !had_glob_output {
-            had_glob_output = true;
-            verbose_println!();
+    let mut glob_output = {
+        let mut had_glob_output = false;
+        move || {
+            if !had_glob_output {
+                had_glob_output = true;
+                verbose_println!();
+            }
         }
     };
 
@@ -193,7 +210,7 @@ fn expand_glob(path: &Path, dotfiles_path: &AbsolutePath) -> Result<Vec<PathBuf>
         .collect();
 
     // If an entry just got expanded to itself, don't print anything about it
-    match &expanded_paths.as_slice() {
+    match expanded_paths.as_slice() {
         [expanded_path] if expanded_path == path => (),
         _ => {
             glob_output();
@@ -227,26 +244,9 @@ fn merge_dotrc(
         }
     }
 
-    /// If `path` begins with a tilde, attempts to expand it into the
-    /// full home directory path. If `path` doesn't start with a tilde, just
-    /// successfully returns path. Fails if the home directory cannot
-    /// be read as a `String`.
-    fn expand_tilde(path: String) -> Option<String> {
-        Some(
-            if path.starts_with('~') {
-                path.replacen("~", util::home_dir().to_str()?, 1)
-            } else {
-                path
-            },
-        )
-    }
-
     let dotfiles_path = AbsolutePath::from(merge_hierarchy(
         partial_config.dotfiles_path,
-        dotrc_config
-            .dotfiles_path
-            .and_then(expand_tilde)
-            .map(PathBuf::from),
+        dotrc_config.dotfiles_path.map(util::tilde_to_home),
     ));
 
     let excludes = {
@@ -320,12 +320,12 @@ fn find_dotrc(partial_config: &PartialConfig) -> Option<AbsolutePath> {
     let config = partial_config.to_config().ok()?;
 
     // Try to check if a dotrc was among the files discovered from partial_config
-    let items = crate::resolver::get(&config).ok()?;
+    let items = crate::resolver::get_items(&config).ok()?;
     for item in items {
-        match item.dest().file_name() {
+        match item.dest.file_name() {
             Some(name) if DOTRC_NAMES.contains(&name) => {
-                verbose_println!("Discovered dotrc at {}", item.source());
-                return Some(item.source().clone());
+                verbose_println!("Discovered dotrc at {}", item.source);
+                return Some(item.source.clone());
             },
             _ => (),
         }
@@ -340,17 +340,6 @@ fn find_dotrc(partial_config: &PartialConfig) -> Option<AbsolutePath> {
     }
 
     None
-}
-
-/// Loads the configuration.
-///
-/// Draws from CLI arguments, the dotrc, and default values (where applicable)
-pub fn get() -> Result<Config, Error> {
-    let partial_config = PartialConfig::merge(cli::Config::get(), DefaultConfig::get()?);
-    let dotrc_config = dotrc::get(find_dotrc(&partial_config))?;
-    let config = merge_dotrc(partial_config, dotrc_config)?;
-
-    Ok(config)
 }
 
 #[derive(Fail, Debug, From)]

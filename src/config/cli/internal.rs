@@ -8,7 +8,6 @@ use structopt::StructOpt;
 //
 // The portion of the configuration read from CLI arguments
 #[derive(Debug, Clone, StructOpt)]
-#[structopt(author = "", rename_all = "kebab-case")]
 pub(super) struct RawConfig {
     #[structopt(subcommand)]
     pub(super) command: Command,
@@ -18,7 +17,6 @@ pub(super) struct RawConfig {
 }
 
 #[derive(Debug, Clone, StructOpt)]
-#[structopt(rename_all = "kebab-case")]
 pub(super) enum Command {
     /// Lists the active dotfiles
     Ls {
@@ -27,7 +25,6 @@ pub(super) enum Command {
     },
 
     /// Links all active dotfiles
-    #[structopt(name = "link")]
     Link {
         /// Skips the actual linking step. Everything else (e.g. errors and
         /// prompts) remains unchanged.
@@ -40,7 +37,6 @@ pub(super) enum Command {
 }
 
 #[derive(Debug, Clone, StructOpt)]
-#[structopt(rename_all = "kebab-case")]
 pub(super) struct Options {
     /// Enables verbose output.
     #[structopt(short, long)]

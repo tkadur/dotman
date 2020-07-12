@@ -105,7 +105,7 @@ fn find_items(
     Ok(())
 }
 
-pub fn get(config: &Config) -> Result<Vec<Item>, Error> {
+pub fn get_items(config: &Config) -> Result<Vec<Item>, Error> {
     let hostname_prefix = "host-";
     let tag_prefix = "tag-";
     let platform_prefix = "platform-";
@@ -124,17 +124,17 @@ pub fn get(config: &Config) -> Result<Vec<Item>, Error> {
         false
     };
 
-    let hostname_dir = PathBuf::from([hostname_prefix, config.hostname()].concat());
+    let hostname_dir = PathBuf::from([hostname_prefix, &config.hostname].concat());
 
     let platform_dirs: Vec<PathBuf> = config
-        .platform()
+        .platform
         .strs()
         .iter()
         .map(|platform| PathBuf::from([platform_prefix, platform].concat()))
         .collect();
 
     let tag_dirs: Vec<PathBuf> = config
-        .tags()
+        .tags
         .iter()
         .map(|tag| PathBuf::from([tag_prefix, tag].concat()))
         .collect();
@@ -145,12 +145,12 @@ pub fn get(config: &Config) -> Result<Vec<Item>, Error> {
         .map(|p| p.as_path())
         .collect();
 
-    let excludes = config.excludes().iter().collect();
+    let excludes = config.excludes.iter().collect();
 
     let mut res = vec![];
 
     find_items(
-        config.dotfiles_path().clone(),
+        config.dotfiles_path.clone(),
         &is_prefixed,
         &active_prefixed_dirs,
         &excludes,
@@ -158,14 +158,11 @@ pub fn get(config: &Config) -> Result<Vec<Item>, Error> {
     )?;
 
     // Check for duplicate destinations
-    let mut seen = HashSet::new();
-    for item in &res {
-        let dest = item.dest();
-        if seen.contains(dest) {
-            return Err(DuplicateFiles { dest: dest.clone() });
-        } else {
-            seen.insert(dest);
-        }
+    let dests = res.iter().map(|item| &item.dest);
+    if let Some(duplicate_dest) = util::find_duplicate(dests) {
+        return Err(DuplicateFiles {
+            dest: duplicate_dest.clone(),
+        });
     }
 
     Ok(res)

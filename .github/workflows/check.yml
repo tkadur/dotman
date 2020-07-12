@@ -1,0 +1,116 @@
+name: Check
+
+on:
+  # Trigger the workflow on push to master or pull request
+  push:
+    branches:
+      - master
+  pull_request:
+  release:
+
+jobs:
+  # Check formatting
+  fmt:
+    strategy:
+      matrix:
+        # Not much point running this on multiple OSes, since the code is never built
+        os: [ubuntu-latest]
+        # We need nightly rustfmt for many of the options in the rustfmt.toml
+        toolchain: [nightly]
+      fail-fast: false
+
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - uses: actions/checkout@v1
+
+      - name: Install latest ${{ matrix.toolchain }}
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: ${{ matrix.toolchain }}
+          components: rustfmt
+          override: true
+
+      - name: Check formatting
+        uses: actions-rs/cargo@v1
+        with:
+          command: fmt
+          args: -- --check
+
+  # Build
+  build:
+    strategy:
+      matrix:
+        os: [macos-latest, ubuntu-latest]
+        toolchain: [stable, beta, nightly]
+        build-mode: ["", --release]
+      fail-fast: false
+
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - uses: actions/checkout@v1
+
+      - name: Install latest ${{ matrix.toolchain }}
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: ${{ matrix.toolchain }}
+          override: true
+
+      - name: Build
+        uses: actions-rs/cargo@v1
+        with:
+          command: build
+          args: --verbose ${{ matrix.build-mode }}
+
+  # Check with Clippy
+  clippy:
+    strategy:
+      matrix:
+        os: [macos-latest, ubuntu-latest]
+        toolchain: [stable]
+      fail-fast: false
+
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - uses: actions/checkout@v1
+
+      - name: Install latest ${{ matrix.toolchain }}
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: ${{ matrix.toolchain }}
+          components: clippy
+          override: true
+
+      - name: Check
+        uses: actions-rs/clippy-check@v1
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          args: --all-targets --all-features
+
+  # Test
+  test:
+    strategy:
+      matrix:
+        os: [macos-latest, ubuntu-latest]
+        toolchain: [stable, beta, nightly]
+        build-mode: ["", --release]
+      fail-fast: false
+
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - uses: actions/checkout@v1
+
+      - name: Install latest ${{ matrix.toolchain }}
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: ${{ matrix.toolchain }}
+          override: true
+
+      - name: Test
+        uses: actions-rs/cargo@v1
+        with:
+          command: test
+          args: --verbose ${{ matrix.build-mode }}

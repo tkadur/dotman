@@ -19,39 +19,41 @@ pub(super) struct Config {
     pub(super) platform: Option<String>,
 }
 
-/// Gets configuration options from the dotrc file.
-///
-/// The dotrc file not existing is _not_ considered an error,
-/// and will return an empty config. Failure to read the dotrc
-/// file or a malformed dotrc, on the other hand, _is_ considered
-/// an error.
-pub(super) fn get(dotrc_path: Option<impl AsRef<Path>>) -> Result<Config, Error> {
-    let path = match dotrc_path {
-        Some(path) => path,
-        None => return Ok(Config::default()),
-    };
+impl Config {
+    /// Gets configuration options from the dotrc file.
+    ///
+    /// The dotrc file not existing is _not_ considered an error,
+    /// and will return an empty config. Failure to read the dotrc
+    /// file or a malformed dotrc, on the other hand, _is_ considered
+    /// an error.
+    pub(super) fn get(dotrc_path: Option<impl AsRef<Path>>) -> Result<Config, Error> {
+        let path = match dotrc_path {
+            Some(path) => path,
+            None => return Ok(Config::default()),
+        };
 
-    let file = match fs::File::open(path) {
-        Ok(file) => file,
-        Err(_) => return Ok(Config::default()),
-    };
+        let file = match fs::File::open(path) {
+            Ok(file) => file,
+            Err(_) => return Ok(Config::default()),
+        };
 
-    let contents = {
-        let mut file = file;
-        let mut contents = String::new();
-        file.read_to_string(&mut contents)?;
+        let contents = {
+            let mut file = file;
+            let mut contents = String::new();
+            file.read_to_string(&mut contents)?;
 
-        contents
-    };
+            contents
+        };
 
-    // serde_yaml errors on empty input, so handle that case manually
-    if contents.is_empty() {
-        return Ok(Config::default());
+        // serde_yaml errors on empty input, so handle that case manually
+        if contents.is_empty() {
+            return Ok(Config::default());
+        }
+
+        let config = serde_yaml::from_str(&contents)?;
+
+        Ok(config)
     }
-
-    let config = serde_yaml::from_str(&contents)?;
-
-    Ok(config)
 }
 
 #[derive(Debug, From, Fail)]
@@ -74,7 +76,7 @@ mod tests {
         let mut dotrc = NamedTempFile::new().unwrap();
         write!(dotrc, "{}", contents).unwrap();
 
-        super::get(Some(dotrc.path())).unwrap()
+        super::Config::get(Some(dotrc.path())).unwrap()
     }
 
     #[test]

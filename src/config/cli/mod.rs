@@ -57,6 +57,8 @@ impl Config {
                     (None, None) => None,
                     (Some($name), None) | (None, Some($name)) => Some($name),
                     (Some(_), Some(_)) => {
+                        // Both the main command and the subcommand contain the argument.
+                        //
                         // We simply append an extra usage of --$name onto the existing args, then
                         // try to parse them again. This should trigger an error about
                         // $name appearing twice, which we display before exiting.
